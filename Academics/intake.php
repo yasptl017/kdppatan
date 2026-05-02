@@ -2,8 +2,57 @@
 <html lang="en">
 <?php $page_title = "Departments & Intake - K.D. Polytechnic"; ?>
 <?php include '../assets/preload/head.php'; ?>
+<style>
+    .intake-table {
+        width: 100%;
+        border-collapse: collapse;
+        background: #fff;
+        color: #000;
+        font-size: 18px;
+    }
+    .intake-table th,
+    .intake-table td {
+        border: 1px solid #000;
+        padding: 6px 8px;
+        vertical-align: middle;
+    }
+    .intake-table th {
+        text-align: center;
+        font-weight: 700;
+        font-size: 20px;
+    }
+    .intake-table td {
+        text-align: center;
+    }
+    .intake-table td.branch-name {
+        text-align: left;
+    }
+    @media (max-width: 767px) {
+        .intake-table {
+            font-size: 14px;
+            min-width: 820px;
+        }
+        .intake-table th {
+            font-size: 15px;
+        }
+    }
+</style>
 <body>
 <?php include_once "../Admin/dbconfig.php"; ?>
+<?php
+$intakeColumns = [
+    'supernumerary_seats' => "ALTER TABLE intake ADD supernumerary_seats int(11) NOT NULL DEFAULT 0 AFTER intek",
+    'aicte_plus_supernumerary' => "ALTER TABLE intake ADD aicte_plus_supernumerary int(11) NOT NULL DEFAULT 0 AFTER supernumerary_seats",
+    'tfws_seats' => "ALTER TABLE intake ADD tfws_seats int(11) NOT NULL DEFAULT 0 AFTER aicte_plus_supernumerary",
+    'total_seats' => "ALTER TABLE intake ADD total_seats int(11) NOT NULL DEFAULT 0 AFTER tfws_seats"
+];
+foreach ($intakeColumns as $column => $alterSql) {
+    $columnCheck = $conn->query("SHOW COLUMNS FROM intake LIKE '$column'");
+    if ($columnCheck && $columnCheck->num_rows === 0) {
+        $conn->query($alterSql);
+    }
+}
+?>
 <!-- Top Info Bar -->
 <?php include '../assets/preload/topbar.php'; ?>
 <!-- Header -->
@@ -51,32 +100,40 @@ $intake_result = $conn->query($intake_query);
         <div class="row">
             <div class="col-12">
                 <div class="table-responsive">
-                    <table class="table academic-table">
+                    <table class="intake-table">
                         <thead>
                             <tr>
-                                <th>Sr. No.</th>
-                                <th>Course Name</th>
-                                <th>Intake Capacity</th>
-                                <th>Duration</th>
-                                <th>Remarks</th>
+                                <th>Sr.<br>No</th>
+                                <th>Branch Name</th>
+                                <th>AICTE<br>INTAKE</th>
+                                <th>SUPERNUMERI<br>SEAT 25%</th>
+                                <th>AICTE+<br>SUPERNUMERI</th>
+                                <th>TFWS<br>5%</th>
+                                <th>Total Seat<br>for<br>Admission</th>
                             </tr>
                         </thead>
                         <tbody>
                         <?php $sr = 1; ?>
                         <?php while ($intake = $intake_result->fetch_assoc()): ?>
                             <tr>
-                                <td data-label="Sr. No."><?php echo $sr++; ?></td>
-                                <td data-label="Course Name">
-                                    <?php echo $intake['course_name']; ?>
+                                <td><?php echo $sr++; ?></td>
+                                <td class="branch-name">
+                                    <?php echo htmlspecialchars($intake['course_name']); ?>
                                 </td>
-                                <td data-label="Intake Capacity">
-                                    <?php echo $intake['intek']; ?> Students
+                                <td>
+                                    <?php echo htmlspecialchars($intake['intek']); ?>
                                 </td>
-                                <td data-label="Duration">
-                                    <?php echo $intake['duration']; ?>
+                                <td>
+                                    <?php echo htmlspecialchars($intake['supernumerary_seats'] ?? 0); ?>
                                 </td>
-                                <td data-label="Remarks">
-                                    <?php echo !empty($intake['remark']) ? $intake['remark'] : '-'; ?>
+                                <td>
+                                    <?php echo htmlspecialchars($intake['aicte_plus_supernumerary'] ?? 0); ?>
+                                </td>
+                                <td>
+                                    <?php echo htmlspecialchars($intake['tfws_seats'] ?? 0); ?>
+                                </td>
+                                <td>
+                                    <?php echo htmlspecialchars($intake['total_seats'] ?? 0); ?>
                                 </td>
                             </tr>
                         <?php endwhile; ?>

@@ -8,6 +8,19 @@ include "head.php";
 $message = "";
 $messageType = "";
 
+$intakeColumns = [
+    'supernumerary_seats' => "ALTER TABLE intake ADD supernumerary_seats int(11) NOT NULL DEFAULT 0 AFTER intek",
+    'aicte_plus_supernumerary' => "ALTER TABLE intake ADD aicte_plus_supernumerary int(11) NOT NULL DEFAULT 0 AFTER supernumerary_seats",
+    'tfws_seats' => "ALTER TABLE intake ADD tfws_seats int(11) NOT NULL DEFAULT 0 AFTER aicte_plus_supernumerary",
+    'total_seats' => "ALTER TABLE intake ADD total_seats int(11) NOT NULL DEFAULT 0 AFTER tfws_seats"
+];
+foreach ($intakeColumns as $column => $alterSql) {
+    $columnCheck = $conn->query("SHOW COLUMNS FROM intake LIKE '$column'");
+    if ($columnCheck && $columnCheck->num_rows === 0) {
+        $conn->query($alterSql);
+    }
+}
+
 /* -------------------------
    MOVE UP / DOWN
 ------------------------- */
@@ -58,14 +71,36 @@ if (isset($_POST['save_intake'])) {
     $id = $_POST['intake_id'];
     $course_name = $conn->real_escape_string($_POST['course_name']);
     $display_order = intval($_POST['display_order']);
-    $intek = $conn->real_escape_string($_POST['intek']);
-    $duration = $conn->real_escape_string($_POST['duration']);
-    $remark = $conn->real_escape_string($_POST['remark']);
+    $intek = intval($_POST['intek']);
+    $supernumerary_seats = intval($_POST['supernumerary_seats']);
+    $aicte_plus_supernumerary = intval($_POST['aicte_plus_supernumerary']);
+    $tfws_seats = intval($_POST['tfws_seats']);
+    $total_seats = intval($_POST['total_seats']);
 
     if ($id == "") {
         // Insert
-        $sql = "INSERT INTO intake (course_name, display_order, intek, duration, remark)
-                VALUES ('$course_name', $display_order, '$intek', '$duration', '$remark')";
+        $sql = "INSERT INTO intake (
+                    course_name,
+                    display_order,
+                    intek,
+                    supernumerary_seats,
+                    aicte_plus_supernumerary,
+                    tfws_seats,
+                    total_seats,
+                    duration,
+                    remark
+                )
+                VALUES (
+                    '$course_name',
+                    $display_order,
+                    $intek,
+                    $supernumerary_seats,
+                    $aicte_plus_supernumerary,
+                    $tfws_seats,
+                    $total_seats,
+                    '',
+                    ''
+                )";
         $conn->query($sql);
 
         $message = "Intake added successfully!";
@@ -76,9 +111,11 @@ if (isset($_POST['save_intake'])) {
         $sql = "UPDATE intake SET
                     course_name='$course_name',
                     display_order=$display_order,
-                    intek='$intek',
-                    duration='$duration',
-                    remark='$remark'
+                    intek=$intek,
+                    supernumerary_seats=$supernumerary_seats,
+                    aicte_plus_supernumerary=$aicte_plus_supernumerary,
+                    tfws_seats=$tfws_seats,
+                    total_seats=$total_seats
                 WHERE id=$id";
 
         $conn->query($sql);
@@ -133,11 +170,13 @@ $intakes = $conn->query("SELECT * FROM intake ORDER BY display_order ASC, id DES
             <thead>
                 <tr class="text-center">
                     <th width="50">#</th>
-                    <th>Course Name</th>
+                    <th>Branch Name</th>
                     <th>Order</th>
-                    <th>Intek</th>
-                    <th>Duration</th>
-                    <th>Remark</th>
+                    <th>AICTE Intake</th>
+                    <th>Supernumerary Seat 25%</th>
+                    <th>AICTE + Supernumerary</th>
+                    <th>TFWS 5%</th>
+                    <th>Total Seat for Admission</th>
                     <th width="200">Action</th>
                 </tr>
             </thead>
@@ -148,9 +187,11 @@ $intakes = $conn->query("SELECT * FROM intake ORDER BY display_order ASC, id DES
                     <td class="text-center"><?php echo $i++; ?></td>
                     <td><?php echo $row['course_name']; ?></td>
                     <td class="text-center"><?php echo $row['display_order']; ?></td>
-                    <td><?php echo $row['intek']; ?></td>
-                    <td><?php echo $row['duration']; ?></td>
-                    <td><?php echo $row['remark']; ?></td>
+                    <td class="text-center"><?php echo $row['intek']; ?></td>
+                    <td class="text-center"><?php echo $row['supernumerary_seats']; ?></td>
+                    <td class="text-center"><?php echo $row['aicte_plus_supernumerary']; ?></td>
+                    <td class="text-center"><?php echo $row['tfws_seats']; ?></td>
+                    <td class="text-center"><?php echo $row['total_seats']; ?></td>
 
                     <td>
                         <div class="action-buttons">
@@ -205,7 +246,7 @@ $intakes = $conn->query("SELECT * FROM intake ORDER BY display_order ASC, id DES
                     <input type="hidden" name="intake_id" id="intake_id">
 
                     <div class="mb-3">
-                        <label class="form-label">Course Name *</label>
+                        <label class="form-label">Branch Name *</label>
                         <input type="text" name="course_name" id="course_name" class="form-control" required>
                     </div>
 
@@ -215,18 +256,28 @@ $intakes = $conn->query("SELECT * FROM intake ORDER BY display_order ASC, id DES
                     </div>
 
                     <div class="mb-3">
-                        <label class="form-label">Intek *</label>
-                        <input type="text" name="intek" id="intek" class="form-control" required>
+                        <label class="form-label">AICTE Intake *</label>
+                        <input type="number" name="intek" id="intek" class="form-control" min="0" required>
                     </div>
 
                     <div class="mb-3">
-                        <label class="form-label">Duration *</label>
-                        <input type="text" name="duration" id="duration" class="form-control" required>
+                        <label class="form-label">Supernumerary Seat 25% *</label>
+                        <input type="number" name="supernumerary_seats" id="supernumerary_seats" class="form-control" min="0" required>
                     </div>
 
                     <div class="mb-3">
-                        <label class="form-label">Remark</label>
-                        <input type="text" name="remark" id="remark" class="form-control">
+                        <label class="form-label">AICTE + Supernumerary *</label>
+                        <input type="number" name="aicte_plus_supernumerary" id="aicte_plus_supernumerary" class="form-control" min="0" required>
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label">TFWS 5% *</label>
+                        <input type="number" name="tfws_seats" id="tfws_seats" class="form-control" min="0" required>
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label">Total Seat for Admission *</label>
+                        <input type="number" name="total_seats" id="total_seats" class="form-control" min="0" required>
                     </div>
 
                 </div>
@@ -261,8 +312,10 @@ function addIntake() {
     document.getElementById("course_name").value = "";
     document.getElementById("display_order").value = "";
     document.getElementById("intek").value = "";
-    document.getElementById("duration").value = "";
-    document.getElementById("remark").value = "";
+    document.getElementById("supernumerary_seats").value = "";
+    document.getElementById("aicte_plus_supernumerary").value = "";
+    document.getElementById("tfws_seats").value = "";
+    document.getElementById("total_seats").value = "";
 }
 
 // Load record for edit
@@ -272,8 +325,10 @@ function editIntake(data) {
     document.getElementById("course_name").value = data.course_name;
     document.getElementById("display_order").value = data.display_order;
     document.getElementById("intek").value = data.intek;
-    document.getElementById("duration").value = data.duration;
-    document.getElementById("remark").value = data.remark;
+    document.getElementById("supernumerary_seats").value = data.supernumerary_seats || 0;
+    document.getElementById("aicte_plus_supernumerary").value = data.aicte_plus_supernumerary || 0;
+    document.getElementById("tfws_seats").value = data.tfws_seats || 0;
+    document.getElementById("total_seats").value = data.total_seats || 0;
 }
 </script>
 
