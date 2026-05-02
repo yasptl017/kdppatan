@@ -64,7 +64,7 @@ $page_title = "Faculty - " . $DEPARTMENT_NAME . " - K.D. Polytechnic";
         }
         
         .faculty-photo-wrapper {
-            height: 220px;
+            height: 280px;
             overflow: hidden;
             background: #f8f9fa;
         }
@@ -72,8 +72,8 @@ $page_title = "Faculty - " . $DEPARTMENT_NAME . " - K.D. Polytechnic";
         .faculty-photo-wrapper img {
             width: 100%;
             height: 100%;
-            object-fit: cover;
-            object-position: center;
+            object-fit: contain;
+            object-position: center top;
         }
         
         .faculty-info {
@@ -109,7 +109,7 @@ $page_title = "Faculty - " . $DEPARTMENT_NAME . " - K.D. Polytechnic";
                 width: 33.333%; /* 3 cards per row on small tablets */
             }
             .faculty-photo-wrapper {
-                height: 200px;
+                height: 250px;
             }
         }
         
@@ -120,7 +120,7 @@ $page_title = "Faculty - " . $DEPARTMENT_NAME . " - K.D. Polytechnic";
                 margin-bottom: 20px;
             }
             .faculty-photo-wrapper {
-                height: 180px;
+                height: 230px;
             }
             .faculty-info {
                 padding: 15px 10px;
@@ -138,7 +138,7 @@ $page_title = "Faculty - " . $DEPARTMENT_NAME . " - K.D. Polytechnic";
                 width: 50%; /* Still 2 cards on very small screens */
             }
             .faculty-photo-wrapper {
-                height: 160px;
+                height: 210px;
             }
             .faculty-info {
                 padding: 12px 8px;
