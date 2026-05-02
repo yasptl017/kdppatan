@@ -10,6 +10,12 @@ $message = "";
 $messageType = "";
 $collegeData = null;
 
+// Ensure the Email 2 column exists for older databases.
+$columnCheck = $conn->query("SHOW COLUMNS FROM college_details LIKE 'email_2'");
+if ($columnCheck && $columnCheck->num_rows === 0) {
+    $conn->query("ALTER TABLE college_details ADD email_2 varchar(100) DEFAULT NULL AFTER email");
+}
+
 // Create uploads directory if it doesn't exist
 $uploadDir = "uploads/";
 if (!file_exists($uploadDir)) {
@@ -29,6 +35,7 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
     $college_name = $conn->real_escape_string($_POST['college_name']);
     $college_alt_name = $conn->real_escape_string($_POST['college_alt_name']);
     $email = $conn->real_escape_string($_POST['email']);
+    $email_2 = $conn->real_escape_string($_POST['email_2'] ?? '');
     $address = $conn->real_escape_string($_POST['address']);
     $contact_no = $conn->real_escape_string($_POST['contact_no']);
 
@@ -78,6 +85,7 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
             logo_1 = '$logo_1',
             logo_2 = '$logo_2',
             email = '$email',
+            email_2 = '$email_2',
             address = '$address',
             contact_no = '$contact_no',
             college_description = '$college_description',
@@ -178,6 +186,12 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
                 <label class="form-label">Email <span class="text-danger">*</span></label>
                 <input type="email" class="form-control" name="email" 
                     value="<?php echo htmlspecialchars($collegeData['email'] ?? ''); ?>" required>
+            </div>
+
+            <div class="mb-3">
+                <label class="form-label">Email 2</label>
+                <input type="email" class="form-control" name="email_2"
+                    value="<?php echo htmlspecialchars($collegeData['email_2'] ?? ''); ?>">
             </div>
 
             <div class="mb-3">

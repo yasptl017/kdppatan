@@ -88,7 +88,13 @@ include_once "Admin/dbconfig.php";
                                 </div>
                                 <div class="contact-content">
                                     <h5>Email Us</h5>
-                                    <p><a href="mailto:<?php echo $college['email']; ?>"><?php echo $college['email']; ?></a></p>
+                                    <p>
+                                        <a href="mailto:<?php echo htmlspecialchars($college['email']); ?>"><?php echo htmlspecialchars($college['email']); ?></a>
+                                        <?php if (!empty($college['email_2'])): ?>
+                                            <br>
+                                            <a href="mailto:<?php echo htmlspecialchars($college['email_2']); ?>"><?php echo htmlspecialchars($college['email_2']); ?></a>
+                                        <?php endif; ?>
+                                    </p>
                                 </div>
                             </div>
 
