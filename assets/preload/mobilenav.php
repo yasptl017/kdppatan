@@ -45,7 +45,6 @@ $mobile_menu_result = $conn->query($mobile_menu_query);
                     <a href="<?php echo $about_path; ?>administration.php" class="mobile-menu-link">Administration</a>
                     <a href="<?php echo $about_path; ?>facilities.php" class="mobile-menu-link">Facilities</a>
                     <a href="<?php echo $about_path; ?>newsletter.php" class="mobile-menu-link">Newsletter</a>
-                    <a href="<?php echo $about_path; ?>mandatory_disclosure.php" class="mobile-menu-link">Mandatory Disclosure</a>
                     <a href="<?php echo $about_path; ?>institute_committees.php" class="mobile-menu-link">Institute Committees</a>
                     <a href="<?php echo $about_path; ?>organization.php" class="mobile-menu-link">Organization</a>
                 </div>
@@ -61,8 +60,6 @@ $mobile_menu_result = $conn->query($mobile_menu_query);
                     <a href="<?php echo $academics_path; ?>accreditation.php" class="mobile-menu-link">Accreditation</a>
                     <a href="<?php echo $academics_path; ?>academic-calendar.php" class="mobile-menu-link">Academic Calendar</a>
                     <a href="<?php echo $academics_path; ?>admission.php" class="mobile-menu-link">Admission Details</a>
-                    <a href="<?php echo $academics_path; ?>aicte-eoa.php" class="mobile-menu-link">AICTE EOA</a>
-                    <a href="<?php echo $academics_path; ?>gtu-affiliation.php" class="mobile-menu-link">GTU Affiliation</a>
                     <a href="<?php echo $academics_path; ?>syllabus.php" class="mobile-menu-link">Syllabus</a>
                 </div>
             </li>

@@ -41,7 +41,6 @@ $menu_result = $conn->query($menu_query);
                         <li><a class="dropdown-item" href="<?php echo $about_path; ?>administration.php">Administration</a></li>
                         <li><a class="dropdown-item" href="<?php echo $about_path; ?>facilities.php">Facilities</a></li>
                         <li><a class="dropdown-item" href="<?php echo $about_path; ?>newsletter.php">Newsletter</a></li>
-                        <li><a class="dropdown-item" href="<?php echo $about_path; ?>mandatory_disclosure.php">Mandatory Disclosure</a></li>
                         <li><a class="dropdown-item" href="<?php echo $about_path; ?>institute_committees.php">Institute Committees</a></li>
                         <li><a class="dropdown-item" href="<?php echo $about_path; ?>organization.php">Organization</a></li>
                     </ul>
@@ -54,8 +53,6 @@ $menu_result = $conn->query($menu_query);
                         <li><a class="dropdown-item" href="<?php echo $academics_path; ?>accreditation.php">Accreditation</a></li>
                         <li><a class="dropdown-item" href="<?php echo $academics_path; ?>academic-calendar.php">Academic Calendar</a></li>
                         <li><a class="dropdown-item" href="<?php echo $academics_path; ?>admission.php">Admission Details</a></li>
-                        <li><a class="dropdown-item" href="<?php echo $academics_path; ?>aicte-eoa.php">AICTE EOA</a></li>
-                        <li><a class="dropdown-item" href="<?php echo $academics_path; ?>gtu-affiliation.php">GTU Affiliation</a></li>
                         <li><a class="dropdown-item" href="<?php echo $academics_path; ?>syllabus.php">Syllabus</a></li>
                     </ul>
                 </li>
