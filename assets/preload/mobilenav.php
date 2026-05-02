@@ -157,6 +157,12 @@ $mobile_menu_result = $conn->query($mobile_menu_query);
                 </div>
             </li>
             
+            <li>
+                <a href="<?php echo $base_path; ?>disclosure.php" class="mobile-menu-link">
+                    <i class="fas fa-file-alt"></i> Disclosure
+                </a>
+            </li>
+
             <!--
             <li>
                 <a href="<?php echo $base_path; ?>circulars.php" class="mobile-menu-link">

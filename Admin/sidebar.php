@@ -25,6 +25,7 @@
                 <li><a href="manage_facilities.php">Facilities</a></li>
                 <li><a href="manage_newsletter.php">Newsletter</a></li>
                 <li><a href="manage_md.php">Mandatory Disclosure</a></li>
+                <li><a href="manage_disclosure.php">Disclosure</a></li>
                 <li><a href="manage_committees.php">Institute Committees</a></li>
                 <li><a href="manage_organization_structure.php">Organization Structure</a></li>
                 <li><a href="manage_mou.php">MOU</a></li>

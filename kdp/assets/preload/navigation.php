@@ -154,6 +154,10 @@ $menu_result = $conn->query($menu_query);
                 </li>
                 
                 <li class="nav-item">
+                    <a class="nav-link" href="<?php echo $base_path; ?>disclosure.php">Disclosure</a>
+                </li>
+
+                <li class="nav-item">
                     <a class="nav-link" href="<?php echo $base_path; ?>circulars.php">Circulars</a>
                 </li>
                 
