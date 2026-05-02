@@ -24,6 +24,13 @@ $nav_config = [
         'aliases' => ['notice-details.php'] // Notice details keeps Notice Board active
     ],
     [
+        'file' => 'academic-calendar.php',
+        'label' => 'Academic Calendar',
+        'icon' => 'fa-calendar-alt',
+        'aliases' => [],
+        'requires_data' => 'dept_academic_calendar'
+    ],
+    [
         'file' => 'faculty.php',
         'label' => 'Faculty',
         'icon' => 'fa-chalkboard-teacher',
@@ -52,8 +59,45 @@ $nav_config = [
         'label' => 'Syllabus',
         'icon' => 'fa-book-open',
         'aliases' => []
-    ]
+    ],
 ];
+
+// Only show Academic Calendar tab if this department has at least one visible record
+$_nav_config_filtered = [];
+foreach ($nav_config as $_nav_item) {
+    if (($_nav_item['requires_data'] ?? '') === 'dept_academic_calendar') {
+        $_show_calendar = false;
+        if (isset($conn) && isset($DEPARTMENT_NAME)) {
+            $_table_check = $conn->query("SHOW TABLES LIKE 'dept_academic_calendar'");
+            if ($_table_check && $_table_check->num_rows > 0) {
+                $_dept_esc = $conn->real_escape_string($DEPARTMENT_NAME);
+                $_cal = $conn->query("SELECT id FROM dept_academic_calendar WHERE department='$_dept_esc' AND display_order >= 0 LIMIT 1");
+                $_show_calendar = ($_cal && $_cal->num_rows > 0);
+            }
+        }
+        if (!$_show_calendar) {
+            continue;
+        }
+    }
+    $_nav_config_filtered[] = $_nav_item;
+}
+$nav_config = $_nav_config_filtered;
+
+// Only show Placement tab if this department has at least one visible placement record
+$_show_placement = false;
+if (isset($conn) && isset($DEPARTMENT_NAME)) {
+    $_dept_esc = $conn->real_escape_string($DEPARTMENT_NAME);
+    $_pr = $conn->query("SELECT id FROM dept_placement WHERE department='$_dept_esc' AND display_order >= 0 LIMIT 1");
+    $_show_placement = ($_pr && $_pr->num_rows > 0);
+}
+if ($_show_placement) {
+    $nav_config[] = [
+        'file'    => 'placement.php',
+        'label'   => 'Placement',
+        'icon'    => 'fa-briefcase',
+        'aliases' => []
+    ];
+}
 
 // Function to check if a nav item is active
 function isNavActive($nav_item, $current_page) {
