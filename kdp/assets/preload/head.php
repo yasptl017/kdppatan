@@ -13,7 +13,6 @@
             : 'K.D. Polytechnic, Patan';
         ?>
     </title>
-    <link rel="icon" href="data:,">
 
     <?php
     /*
@@ -53,6 +52,10 @@
         }
     }
     ?>
+
+    <link rel="icon" type="image/png" sizes="32x32" href="<?= BASE_URL ?>assets/favicon/favicon-32x32.png">
+    <link rel="icon" type="image/png" sizes="16x16" href="<?= BASE_URL ?>assets/favicon/favicon-16x16.png">
+    <link rel="apple-touch-icon" sizes="180x180" href="<?= BASE_URL ?>assets/favicon/apple-touch-icon.png">
 
     <!-- ===============================
          BOOTSTRAP CSS
