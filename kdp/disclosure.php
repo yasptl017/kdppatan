@@ -102,7 +102,6 @@
                                                 <tr>
                                                     <th style="width: 80px;">Sr. No</th>
                                                     <th>Title</th>
-                                                    <th style="width: 180px;">Updated</th>
                                                     <th style="width: 190px;">File</th>
                                                 </tr>
                                             </thead>
@@ -118,7 +117,6 @@
                                                         data-search="<?php echo htmlspecialchars($searchText, ENT_QUOTES, 'UTF-8'); ?>">
                                                         <td><?php echo $index + 1; ?></td>
                                                         <td class="fw-semibold"><?php echo htmlspecialchars($title); ?></td>
-                                                        <td><?php echo htmlspecialchars($dateText); ?></td>
                                                         <td>
                                                             <div class="d-flex gap-2 flex-wrap">
                                                                 <a href="<?php echo htmlspecialchars($fileUrl); ?>"
