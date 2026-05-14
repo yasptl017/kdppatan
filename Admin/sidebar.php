@@ -65,6 +65,9 @@
                 <li><a href="about_dept.php">About Department</a></li>
                 <li><a href="manage_dept_nb.php">Notice Board</a></li>
                 <li><a href="manage_dept_acal.php">Academic Calendar</a></li>
+                <li><a href="manage_dept_timetable.php">Time Tables</a></li>
+                <li><a href="manage_dept_results.php">Results</a></li>
+                <li><a href="manage_dept_material.php">Materials</a></li>
                 <li><a href="manage_faculty.php">Add Faculty</a></li>
                 <li><a href="manage_activities.php">Add Activities</a></li>
                 <li><a href="manage_dept_facilities.php">Add Facilities</a></li>

@@ -31,6 +31,27 @@ $nav_config = [
         'requires_data' => 'dept_academic_calendar'
     ],
     [
+        'file' => 'timetable.php',
+        'label' => 'Time Tables',
+        'icon' => 'fa-clock',
+        'aliases' => [],
+        'requires_data' => 'dept_timetable'
+    ],
+    [
+        'file' => 'results.php',
+        'label' => 'Results',
+        'icon' => 'fa-file-pdf',
+        'aliases' => [],
+        'requires_data' => 'dept_results'
+    ],
+    [
+        'file' => 'material.php',
+        'label' => 'Materials',
+        'icon' => 'fa-book-reader',
+        'aliases' => [],
+        'requires_data' => 'dept_material'
+    ],
+    [
         'file' => 'faculty.php',
         'label' => 'Faculty',
         'icon' => 'fa-chalkboard-teacher',
@@ -76,6 +97,48 @@ foreach ($nav_config as $_nav_item) {
             }
         }
         if (!$_show_calendar) {
+            continue;
+        }
+    }
+    if (($_nav_item['requires_data'] ?? '') === 'dept_timetable') {
+        $_show_timetable = false;
+        if (isset($conn) && isset($DEPARTMENT_NAME)) {
+            $_table_check = $conn->query("SHOW TABLES LIKE 'dept_timetable'");
+            if ($_table_check && $_table_check->num_rows > 0) {
+                $_dept_esc = $conn->real_escape_string($DEPARTMENT_NAME);
+                $_tt = $conn->query("SELECT id FROM dept_timetable WHERE department='$_dept_esc' AND display_order >= 0 LIMIT 1");
+                $_show_timetable = ($_tt && $_tt->num_rows > 0);
+            }
+        }
+        if (!$_show_timetable) {
+            continue;
+        }
+    }
+    if (($_nav_item['requires_data'] ?? '') === 'dept_results') {
+        $_show_results = false;
+        if (isset($conn) && isset($DEPARTMENT_NAME)) {
+            $_table_check = $conn->query("SHOW TABLES LIKE 'dept_results'");
+            if ($_table_check && $_table_check->num_rows > 0) {
+                $_dept_esc = $conn->real_escape_string($DEPARTMENT_NAME);
+                $_res = $conn->query("SELECT id FROM dept_results WHERE department='$_dept_esc' AND display_order >= 0 LIMIT 1");
+                $_show_results = ($_res && $_res->num_rows > 0);
+            }
+        }
+        if (!$_show_results) {
+            continue;
+        }
+    }
+    if (($_nav_item['requires_data'] ?? '') === 'dept_material') {
+        $_show_material = false;
+        if (isset($conn) && isset($DEPARTMENT_NAME)) {
+            $_table_check = $conn->query("SHOW TABLES LIKE 'dept_material'");
+            if ($_table_check && $_table_check->num_rows > 0) {
+                $_dept_esc = $conn->real_escape_string($DEPARTMENT_NAME);
+                $_mat = $conn->query("SELECT id FROM dept_material WHERE department='$_dept_esc' AND display_order >= 0 LIMIT 1");
+                $_show_material = ($_mat && $_mat->num_rows > 0);
+            }
+        }
+        if (!$_show_material) {
             continue;
         }
     }

@@ -6,7 +6,7 @@ $is_in_about = ($current_dir === 'About');
 $is_in_academics = ($current_dir === 'Academics');
 $is_in_students = ($current_dir === 'Students');
 $is_in_campus = ($current_dir === 'Campus');
-$is_in_dept = in_array($current_dir, ['Computer', 'Mechanical', 'Civil', 'Electrical', 'Hns']);
+$is_in_dept = in_array($current_dir, ['Computer', 'Mechanical', 'Civil', 'Electrical', 'Hns', 'Applied', 'Ec']);
 $base_path = ($is_in_about || $is_in_academics || $is_in_students || $is_in_campus || $is_in_dept) ? '../' : '';
 $about_path = $is_in_about ? '' : (($is_in_academics || $is_in_students || $is_in_campus || $is_in_dept) ? '../About/' : 'About/');
 $academics_path = $is_in_academics ? '' : (($is_in_about || $is_in_students || $is_in_campus || $is_in_dept) ? '../Academics/' : 'Academics/');
