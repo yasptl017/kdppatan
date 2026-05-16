@@ -4,7 +4,6 @@
 
 session_start();
 include "dbconfig.php";
-include "head.php";
 
 $msg = "";
 $msgType = "success";
@@ -175,12 +174,7 @@ if (isset($_POST['save_faculty'])) {
 ?>
 <!DOCTYPE html>
 <html lang="en">
-<head>
-    <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title><?php echo $isEdit ? 'Edit' : 'Add'; ?> Faculty</title>
-
-    <!-- Summernote CSS - Must be in HEAD -->
+<?php include "head.php"; ?>
 <style>
         .section-divider { 
             border-top: 2px solid #eee; 
@@ -216,7 +210,6 @@ if (isset($_POST['save_faculty'])) {
             border: 1px solid #ced4da;
         }
     </style>
-</head>
 <body>
 <?php include "sidebar.php"; ?>
 <?php include "header.php"; ?>
@@ -506,15 +499,12 @@ $(document).ready(function() {
         }
     };
     
-    // Summernote configuration with full features
-// Summernote config moved to summernote-config.js
-    
     // Initialize all main Summernote editors
     console.log('Initializing main Summernote editors...');
     $('.summernote').each(function() {
         const id = $(this).attr('id');
         console.log('Initializing Summernote on:', id);
-        $(this).summernote(summernoteConfig);
+        initSummernote('#' + id, {height: 250});
     });
     
     // Counter for unique IDs
@@ -540,7 +530,7 @@ $(document).ready(function() {
         
         // Initialize Summernote on new field
         console.log('Initializing Summernote on new field:', uniqueId);
-        $('#' + uniqueId).summernote(summernoteConfig);
+        initSummernote('#' + uniqueId, {height: 250});
         
         // Attach remove handler
         container.lastElementChild.querySelector('.removeExtra').addEventListener('click', function() {
@@ -580,7 +570,7 @@ $(document).ready(function() {
                 container.appendChild(clone);
                 
                 // Initialize Summernote with content
-                $('#' + uniqueId).summernote(summernoteConfig);
+                initSummernote('#' + uniqueId, {height: 250});
                 $('#' + uniqueId).summernote('code', item.desc || '');
                 
                 // Attach remove handler

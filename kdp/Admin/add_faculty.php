@@ -4,7 +4,6 @@
 
 session_start();
 include "dbconfig.php";
-include "head.php";
 
 $msg = "";
 $msgType = "success";
@@ -175,15 +174,10 @@ if (isset($_POST['save_faculty'])) {
 ?>
 <!DOCTYPE html>
 <html lang="en">
-<head>
-    <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title><?php echo $isEdit ? 'Edit' : 'Add'; ?> Faculty</title>
-
-    <!-- Summernote CSS - Must be in HEAD -->
-    <link href="https://cdnjs.cloudflare.com/ajax/libs/summernote/0.8.20/summernote-lite.min.css" rel="stylesheet">
-
-    <style>
+<?php include "head.php"; ?>
+<!-- Summernote CSS -->
+<link href="https://cdnjs.cloudflare.com/ajax/libs/summernote/0.8.20/summernote-lite.min.css" rel="stylesheet">
+<style>
         .section-divider { 
             border-top: 2px solid #eee; 
             margin: 2rem 0; 
@@ -217,8 +211,7 @@ if (isset($_POST['save_faculty'])) {
         .note-editor.note-frame {
             border: 1px solid #ced4da;
         }
-    </style>
-</head>
+</style>
 <body>
 <?php include "sidebar.php"; ?>
 <?php include "header.php"; ?>
