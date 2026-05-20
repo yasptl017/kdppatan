@@ -88,7 +88,6 @@ $page_title = "Results - " . $DEPARTMENT_NAME . " - K.D. Polytechnic";
                                 <tr>
                                     <th style="width: 70px;">#</th>
                                     <th>Title</th>
-                                    <th style="width: 140px;">Order</th>
                                     <th style="width: 170px;">File</th>
                                 </tr>
                             </thead>
@@ -97,7 +96,6 @@ $page_title = "Results - " . $DEPARTMENT_NAME . " - K.D. Polytechnic";
                                     <tr>
                                         <td><?php echo $i++; ?></td>
                                         <td><?php echo htmlspecialchars($result['title']); ?></td>
-                                        <td><?php echo (int)$result['display_order']; ?></td>
                                         <td>
                                             <a href="../Admin/<?php echo htmlspecialchars($result['file_path']); ?>"
                                                class="btn btn-accent btn-sm"
@@ -130,8 +128,8 @@ $page_title = "Results - " . $DEPARTMENT_NAME . " - K.D. Polytechnic";
         $(document).ready(function () {
             $('#resultsTable').DataTable({
                 pageLength: 10,
-                order: [[2, 'asc'], [0, 'asc']],
-                columnDefs: [{ orderable: false, targets: 3 }]
+                order: [[0, 'asc']],
+                columnDefs: [{ orderable: false, targets: 2 }]
             });
         });
     </script>

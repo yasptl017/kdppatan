@@ -95,7 +95,7 @@
                             <i class="fas fa-file-alt"></i>
                         </div>
                         <h5>Application Process</h5>
-                        <p>Online application through ACPC Gujarat</p>
+                        <p>Online application through ACPDC Gujarat</p>
                     </div>
                 </div>
 
