@@ -1,4 +1,4 @@
-﻿/* ========================================
+/* ========================================
    Sidebar Toggle/Collapse Styles
    ======================================== */
 
@@ -28,11 +28,23 @@
     transition: transform 0.3s ease;
 }
 
-/* Sidebar Styles - Desktop Only */
+.sidepanel-toggler-desktop[aria-expanded="false"] svg {
+    transform: rotate(180deg);
+}
+
+.sidepanel-toggler-desktop[aria-expanded="true"] svg {
+    transform: rotate(0deg);
+}
+
+/* ========================================
+   DESKTOP (≥1200px) - Sidebar collapse/expand
+   ======================================== */
 @media (min-width: 1200px) {
     .app-sidepanel {
         width: 250px;
-        transition: width 0.3s ease;
+        transition: width 0.3s ease, left 0.3s ease;
+        /* Override portal.css sidepanel-hidden/visible left positioning */
+        left: 0 !important;
     }
 
     .app-sidepanel .sidepanel-inner {
@@ -58,6 +70,7 @@
 
     .app-sidepanel.collapsed .app-branding {
         justify-content: center;
+        padding: 1rem 0.5rem;
     }
 
     .app-sidepanel.collapsed .nav-link {
@@ -66,15 +79,41 @@
     }
 
     .app-sidepanel.collapsed .nav-icon {
+        position: static;
         margin-right: 0;
+        display: flex;
+        justify-content: center;
+        align-items: center;
     }
 
     .app-sidepanel.collapsed .nav-item.has-submenu .nav-link {
         border-radius: 0.5rem;
     }
+
+    /* Make nav-icon visible & centered when collapsed */
+    .app-sidepanel.collapsed .nav-link .nav-icon {
+        left: 0;
+        top: 0;
+        position: relative;
+        width: 100%;
+        text-align: center;
+        font-size: 1.15rem;
+    }
+
+    /* Hide close button on desktop */
+    .app-sidepanel .sidepanel-close {
+        display: none !important;
+    }
+
+    /* Hide mobile drop overlay on desktop */
+    .app-sidepanel .sidepanel-drop {
+        display: none !important;
+    }
 }
 
-/* App Wrapper - Desktop Margin Management */
+/* ========================================
+   DESKTOP - App wrapper adjusts width
+   ======================================== */
 @media (min-width: 1200px) {
     .app-wrapper {
         margin-left: 250px;
@@ -84,9 +123,21 @@
     .app-wrapper.sidebar-collapsed {
         margin-left: 80px !important;
     }
+
+    /* When sidebar is collapsed, content gets full available width */
+    .app-wrapper.sidebar-collapsed .app-content {
+        padding-left: 1.5rem;
+        padding-right: 1.5rem;
+    }
+
+    .app-wrapper.sidebar-collapsed .container-xl {
+        max-width: 100%;
+    }
 }
 
-/* Mobile and Tablet - Reset sidebar and wrapper */
+/* ========================================
+   MOBILE/TABLET (≤1199.98px) - slide-in sidebar
+   ======================================== */
 @media (max-width: 1199.98px) {
     .app-sidepanel {
         position: fixed;
@@ -95,6 +146,7 @@
         width: auto !important;
         height: 100%;
         z-index: 1030;
+        transition: left 0.3s ease, transform 0.3s ease;
     }
 
     .app-sidepanel .sidepanel-inner {
@@ -116,6 +168,7 @@
 
     .app-wrapper {
         margin-left: 0 !important;
+        transition: none;
     }
 
     .app-wrapper.sidebar-collapsed {
@@ -123,7 +176,9 @@
     }
 }
 
-/* Header Content Layout */
+/* ========================================
+   Header Content Layout
+   ======================================== */
 .app-header-content {
     display: flex;
     align-items: center;
@@ -172,7 +227,9 @@
     }
 }
 
-/* Close button styles */
+/* ========================================
+   Close button styles (mobile only)
+   ======================================== */
 .sidepanel-close {
     position: absolute;
     top: 0.5rem;
@@ -197,10 +254,31 @@
     color: #000;
 }
 
-/* Transitions for smooth animations */
+/* ========================================
+   Smooth transitions for sidebar items
+   ======================================== */
 .nav-link-text,
 .logo-text,
 .nav-icon,
-.app-branding {
-    transition: opacity 0.2s, visibility 0.2s;
+.app-branding,
+.nav-link {
+    transition: opacity 0.2s ease, visibility 0.2s ease, padding 0.3s ease, justify-content 0.3s ease;
+}
+
+/* ========================================
+   Tooltips for collapsed nav items (optional)
+   ======================================== */
+@media (min-width: 1200px) {
+    .app-sidepanel.collapsed .nav-link {
+        position: relative;
+    }
+}
+
+/* ========================================
+   Ensure submenu doesn't show in collapsed state
+   ======================================== */
+@media (min-width: 1200px) {
+    .app-sidepanel.collapsed .collapse.show {
+        display: none !important;
+    }
 }

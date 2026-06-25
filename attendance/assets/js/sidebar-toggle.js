@@ -1,4 +1,4 @@
-﻿// Sidebar toggle (desktop + mobile)
+// Sidebar toggle (desktop + mobile)
 document.addEventListener("DOMContentLoaded", () => {
   const sidepanelTogglerDesktop = document.getElementById("sidepanel-toggler-desktop");
   const sidepanelTogglerMobile = document.getElementById("sidepanel-toggler");
@@ -10,13 +10,35 @@ document.addEventListener("DOMContentLoaded", () => {
 
   const SIDEBAR_STATE_KEY = "sidebar_collapsed";
 
+  // Set initial aria-expanded on the desktop toggle
+  if (sidepanelTogglerDesktop) {
+    sidepanelTogglerDesktop.setAttribute("aria-expanded", "true");
+    sidepanelTogglerDesktop.setAttribute("role", "button");
+  }
+
+  function setToggleAria(isExpanded) {
+    if (sidepanelTogglerDesktop) {
+      sidepanelTogglerDesktop.setAttribute(
+        "aria-expanded",
+        isExpanded ? "true" : "false"
+      );
+    }
+  }
+
   function collapseSidebar() {
     appSidepanel.classList.add("collapsed");
+    // On desktop we don't use sidepanel-hidden (that pushes off-screen)
+    // Only remove the off-screen positioning for desktop
+    if (window.innerWidth >= 1200) {
+      appSidepanel.classList.remove("sidepanel-hidden");
+    } else {
+      appSidepanel.classList.add("sidepanel-hidden");
+    }
     appSidepanel.classList.remove("sidepanel-visible");
-    appSidepanel.classList.add("sidepanel-hidden");
     if (appWrapper) {
       appWrapper.classList.add("sidebar-collapsed");
     }
+    setToggleAria(false);
     localStorage.setItem(SIDEBAR_STATE_KEY, "true");
   }
 
@@ -27,6 +49,7 @@ document.addEventListener("DOMContentLoaded", () => {
     if (appWrapper) {
       appWrapper.classList.remove("sidebar-collapsed");
     }
+    setToggleAria(true);
     localStorage.setItem(SIDEBAR_STATE_KEY, "false");
   }
 
@@ -39,7 +62,7 @@ document.addEventListener("DOMContentLoaded", () => {
   }
 
   function initSidebar() {
-    // Only collapse on desktop (1200px+)
+    // Only apply collapsed state on desktop (≥1200px)
     if (window.innerWidth >= 1200) {
       const isCollapsed = localStorage.getItem(SIDEBAR_STATE_KEY) === "true";
       if (isCollapsed) {
@@ -48,20 +71,31 @@ document.addEventListener("DOMContentLoaded", () => {
         expandSidebar();
       }
     } else {
-      // Mobile/tablet always expanded
-      expandSidebar();
+      // Mobile/tablet: keep sidebar hidden by default (slide-in pattern)
+      appSidepanel.classList.remove("collapsed");
+      appSidepanel.classList.add("sidepanel-hidden");
+      appSidepanel.classList.remove("sidepanel-visible");
+      if (appWrapper) {
+        appWrapper.classList.remove("sidebar-collapsed");
+      }
+      setToggleAria(true);
     }
   }
 
   function resetMobileStyles() {
     appSidepanel.classList.remove("collapsed");
-    appSidepanel.classList.remove("sidepanel-hidden");
+    appSidepanel.classList.remove("sidebar-collapsed");
     if (appWrapper) {
       appWrapper.classList.remove("sidebar-collapsed");
     }
+    // On mobile, hide sidebar by default
+    if (window.innerWidth < 1200) {
+      appSidepanel.classList.add("sidepanel-hidden");
+      appSidepanel.classList.remove("sidepanel-visible");
+    }
   }
 
-  // Desktop toggle button
+  // Desktop toggle button (the icon next to the hamburger)
   if (sidepanelTogglerDesktop) {
     sidepanelTogglerDesktop.addEventListener("click", (e) => {
       e.preventDefault();
@@ -73,32 +107,37 @@ document.addEventListener("DOMContentLoaded", () => {
   if (sidepanelTogglerMobile) {
     sidepanelTogglerMobile.addEventListener("click", (e) => {
       e.preventDefault();
-      appSidepanel.classList.toggle("show");
-    });
-  }
-
-  // Close button (X icon)
-  if (sidepanelClose) {
-    sidepanelClose.addEventListener("click", (e) => {
-      e.preventDefault();
       if (window.innerWidth < 1200) {
-        // Mobile: just hide the sidebar
-        appSidepanel.classList.remove("show");
+        appSidepanel.classList.toggle("show");
+        appSidepanel.classList.toggle("sidepanel-visible");
+        appSidepanel.classList.toggle("sidepanel-hidden");
       } else {
-        // Desktop: toggle collapse
         toggleSidebar();
       }
     });
   }
 
-  // Handle window resize
+  // Close button (X icon — mobile only)
+  if (sidepanelClose) {
+    sidepanelClose.addEventListener("click", (e) => {
+      e.preventDefault();
+      if (window.innerWidth < 1200) {
+        appSidepanel.classList.remove("show");
+        appSidepanel.classList.add("sidepanel-hidden");
+        appSidepanel.classList.remove("sidepanel-visible");
+      } else {
+        toggleSidebar();
+      }
+    });
+  }
+
+  // Handle window resize — re-apply correct layout for the breakpoint
   window.addEventListener("resize", () => {
     if (window.innerWidth < 1200) {
       // Switch to mobile layout
       resetMobileStyles();
-      appSidepanel.classList.remove("show");
     } else {
-      // Switch to desktop layout - restore saved state
+      // Switch to desktop layout — restore saved state
       const isCollapsed = localStorage.getItem(SIDEBAR_STATE_KEY) === "true";
       if (isCollapsed) {
         collapseSidebar();

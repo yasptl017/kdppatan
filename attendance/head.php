@@ -21,6 +21,8 @@
     <!-- App CSS -->
     <link id="theme-style" rel="stylesheet" href="assets/css/portal.css">
     <link id="custom-style" rel="stylesheet" href="assets/css/custom.css">
+    <link id="design-system-style" rel="stylesheet" href="assets/css/design-system.css">
+    <link id="sidebar-toggle-style" rel="stylesheet" href="assets/css/sidebar-toggle.css">
 
     <!-- DataTables CSS -->
     <link rel="stylesheet" href="https://cdn.datatables.net/1.13.6/css/jquery.dataTables.min.css">

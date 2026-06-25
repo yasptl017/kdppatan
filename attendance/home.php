@@ -277,6 +277,7 @@ require_login();
                                 <i class="bi bi-calendar2-check"></i>
                             </div>
                             <h4 class="card-title">My Attendance</h4>
+                            <p class="card-description">View &amp; manage your records</p>
                         </div>
                         <a class="app-card-link-mask" href="myAttendanceSelect.php"></a>
                     </div>
@@ -289,7 +290,7 @@ require_login();
                                 <i class="bi bi-pencil-square"></i>
                             </div>
                             <h4 class="card-title">Edit Attendance</h4>
-                           
+                            <p class="card-description">Modify or delete entries</p>
                         </div>
                         <a class="app-card-link-mask" href="editAttendance.php"></a>
                     </div>
@@ -302,7 +303,7 @@ require_login();
                                 <i class="bi bi-calendar-week"></i>
                             </div>
                             <h4 class="card-title">Add Mapping</h4>
-         
+                            <p class="card-description">Create lecture, lab, tutorial</p>
                         </div>
                         <a class="app-card-link-mask" href="addLectureMapping.php"></a>
                     </div>
@@ -315,7 +316,7 @@ require_login();
                                 <i class="bi bi-file-earmark-bar-graph"></i>
                             </div>
                             <h4 class="card-title">Muster Report</h4>
-                            
+                            <p class="card-description">Generate Excel reports</p>
                         </div>
                         <a class="app-card-link-mask" href="lecmuster.php"></a>
                     </div>

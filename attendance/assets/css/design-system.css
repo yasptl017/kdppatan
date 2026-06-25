@@ -1,0 +1,874 @@
+/* =============================================
+   KDP-MIS Design System - Enhanced UI/UX Layer
+   Applied across all attendance pages
+   - No structural HTML changes required
+   - Adds polish: gradients, shadows, transitions,
+     refined typography, consistent spacing
+   ============================================= */
+
+:root {
+    --ds-primary: #5c6bc0;
+    --ds-primary-dark: #3949ab;
+    --ds-primary-light: #e8eaf6;
+    --ds-accent: #667eea;
+    --ds-accent-2: #764ba2;
+    --ds-success: #43a047;
+    --ds-warning: #fb8c00;
+    --ds-danger: #e53935;
+    --ds-info: #039be5;
+    --ds-bg: #f5f7fb;
+    --ds-bg-elevated: #ffffff;
+    --ds-text: #2d3748;
+    --ds-text-muted: #6c757d;
+    --ds-border: #e7e9ed;
+    --ds-radius: 0.75rem;
+    --ds-radius-sm: 0.5rem;
+    --ds-shadow-sm: 0 1px 3px rgba(15, 23, 42, 0.04), 0 1px 2px rgba(15, 23, 42, 0.06);
+    --ds-shadow-md: 0 4px 12px rgba(15, 23, 42, 0.06), 0 2px 4px rgba(15, 23, 42, 0.04);
+    --ds-shadow-lg: 0 12px 24px rgba(15, 23, 42, 0.08), 0 4px 8px rgba(15, 23, 42, 0.04);
+    --ds-transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* ============================================
+   Page Background - subtle, modern
+   ============================================ */
+.app {
+    background: var(--ds-bg);
+    background-image:
+        radial-gradient(at 0% 0%, rgba(102, 126, 234, 0.05) 0px, transparent 50%),
+        radial-gradient(at 100% 100%, rgba(118, 75, 162, 0.04) 0px, transparent 50%);
+    background-attachment: fixed;
+}
+
+/* ============================================
+   Page Title - elevated, refined
+   ============================================ */
+.app-page-title {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    font-size: 1.5rem !important;
+    font-weight: 700 !important;
+    color: var(--ds-text) !important;
+    margin-bottom: 1.5rem !important;
+    padding-bottom: 0.75rem;
+    position: relative;
+    letter-spacing: -0.02em;
+}
+
+.app-page-title i {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 38px;
+    height: 38px;
+    background: linear-gradient(135deg, var(--ds-accent), var(--ds-accent-2));
+    color: #fff;
+    border-radius: var(--ds-radius-sm);
+    font-size: 1.1rem;
+    box-shadow: 0 4px 12px rgba(102, 126, 234, 0.25);
+    flex-shrink: 0;
+}
+
+.app-page-title::after {
+    content: '';
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    width: 60px;
+    height: 3px;
+    background: linear-gradient(90deg, var(--ds-accent), var(--ds-accent-2));
+    border-radius: 2px;
+}
+
+@media (max-width: 575.98px) {
+    .app-page-title {
+        font-size: 1.25rem !important;
+    }
+    .app-page-title i {
+        width: 34px;
+        height: 34px;
+        font-size: 1rem;
+    }
+}
+
+/* ============================================
+   Cards - refined elevation & hover
+   ============================================ */
+.app-card {
+    background: var(--ds-bg-elevated) !important;
+    border: 1px solid var(--ds-border) !important;
+    border-radius: var(--ds-radius) !important;
+    box-shadow: var(--ds-shadow-sm);
+    transition: var(--ds-transition);
+    overflow: hidden;
+}
+
+.app-card:hover {
+    box-shadow: var(--ds-shadow-md);
+}
+
+.app-card.shadow-sm {
+    box-shadow: var(--ds-shadow-sm) !important;
+}
+
+.app-card-body {
+    padding: 1.25rem !important;
+}
+
+@media (min-width: 768px) {
+    .app-card-body {
+        padding: 1.5rem !important;
+    }
+}
+
+@media (min-width: 992px) {
+    .app-card-body {
+        padding: 1.75rem !important;
+    }
+}
+
+/* Card headings - refined */
+.app-card-body > h4 {
+    font-size: 1.05rem !important;
+    font-weight: 600 !important;
+    color: var(--ds-text) !important;
+    margin-bottom: 1.25rem !important;
+    padding-bottom: 0.75rem !important;
+    border-bottom: 2px solid var(--ds-primary-light) !important;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+/* ============================================
+   Forms - consistent focus, spacing
+   ============================================ */
+.form-label {
+    font-size: 0.825rem !important;
+    font-weight: 600 !important;
+    color: #475569 !important;
+    margin-bottom: 0.4rem !important;
+    letter-spacing: 0.01em;
+}
+
+.form-control,
+.form-select {
+    font-size: 0.9rem !important;
+    border-radius: var(--ds-radius-sm) !important;
+    border: 1.5px solid #e2e8f0 !important;
+    padding: 0.55rem 0.85rem !important;
+    background-color: #fff !important;
+    transition: var(--ds-transition) !important;
+    color: var(--ds-text);
+}
+
+.form-control:hover,
+.form-select:hover {
+    border-color: #cbd5e1 !important;
+}
+
+.form-control:focus,
+.form-select:focus {
+    border-color: var(--ds-primary) !important;
+    box-shadow: 0 0 0 4px rgba(92, 107, 192, 0.12) !important;
+    outline: none;
+}
+
+.form-control::placeholder {
+    color: #94a3b8;
+    font-weight: 400;
+}
+
+textarea.form-control {
+    resize: vertical;
+    min-height: 80px;
+}
+
+/* Input groups */
+.input-group {
+    border-radius: var(--ds-radius-sm);
+    overflow: hidden;
+}
+
+.input-group .form-control {
+    border-radius: var(--ds-radius-sm) 0 0 var(--ds-radius-sm) !important;
+}
+
+.input-group .btn {
+    border-radius: 0 var(--ds-radius-sm) var(--ds-radius-sm) 0 !important;
+}
+
+/* ============================================
+   Buttons - refined hover & states
+   ============================================ */
+.btn {
+    border-radius: var(--ds-radius-sm) !important;
+    font-size: 0.875rem !important;
+    font-weight: 500 !important;
+    padding: 0.55rem 1.1rem !important;
+    transition: var(--ds-transition) !important;
+    border-width: 1.5px !important;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.35rem;
+}
+
+.btn:active {
+    transform: translateY(1px);
+}
+
+.btn-sm {
+    padding: 0.4rem 0.8rem !important;
+    font-size: 0.825rem !important;
+    border-radius: 0.4rem !important;
+}
+
+.btn-primary {
+    background: linear-gradient(135deg, var(--ds-primary), var(--ds-primary-dark)) !important;
+    border-color: transparent !important;
+    box-shadow: 0 2px 8px rgba(92, 107, 192, 0.25);
+}
+
+.btn-primary:hover,
+.btn-primary:focus {
+    background: linear-gradient(135deg, var(--ds-primary-dark), #283593) !important;
+    border-color: transparent !important;
+    box-shadow: 0 4px 12px rgba(92, 107, 192, 0.35) !important;
+    transform: translateY(-1px);
+}
+
+.btn-success {
+    background: var(--ds-success) !important;
+    border-color: var(--ds-success) !important;
+    box-shadow: 0 2px 6px rgba(67, 160, 71, 0.2);
+}
+
+.btn-success:hover {
+    background: #2e7d32 !important;
+    border-color: #2e7d32 !important;
+    box-shadow: 0 4px 12px rgba(67, 160, 71, 0.3) !important;
+    transform: translateY(-1px);
+}
+
+.btn-warning {
+    background: var(--ds-warning) !important;
+    border-color: var(--ds-warning) !important;
+    color: #fff !important;
+    box-shadow: 0 2px 6px rgba(251, 140, 0, 0.2);
+}
+
+.btn-warning:hover {
+    background: #ef6c00 !important;
+    border-color: #ef6c00 !important;
+    color: #fff !important;
+    transform: translateY(-1px);
+}
+
+.btn-danger {
+    background: var(--ds-danger) !important;
+    border-color: var(--ds-danger) !important;
+    box-shadow: 0 2px 6px rgba(229, 57, 53, 0.2);
+}
+
+.btn-danger:hover {
+    background: #c62828 !important;
+    border-color: #c62828 !important;
+    transform: translateY(-1px);
+}
+
+.btn-outline-primary {
+    color: var(--ds-primary) !important;
+    border-color: var(--ds-primary) !important;
+    background: transparent;
+}
+
+.btn-outline-primary:hover {
+    background: var(--ds-primary) !important;
+    color: #fff !important;
+    transform: translateY(-1px);
+    box-shadow: 0 4px 10px rgba(92, 107, 192, 0.25);
+}
+
+.btn-outline-success {
+    color: var(--ds-success) !important;
+    border-color: var(--ds-success) !important;
+}
+
+.btn-outline-success:hover {
+    background: var(--ds-success) !important;
+    color: #fff !important;
+    transform: translateY(-1px);
+}
+
+.btn-outline-danger {
+    color: var(--ds-danger) !important;
+    border-color: var(--ds-danger) !important;
+}
+
+.btn-outline-danger:hover {
+    background: var(--ds-danger) !important;
+    color: #fff !important;
+    transform: translateY(-1px);
+}
+
+.btn-outline-secondary {
+    color: #64748b !important;
+    border-color: #cbd5e1 !important;
+}
+
+.btn-outline-secondary:hover {
+    background: #64748b !important;
+    border-color: #64748b !important;
+    color: #fff !important;
+    transform: translateY(-1px);
+}
+
+.btn-outline-warning {
+    color: var(--ds-warning) !important;
+    border-color: var(--ds-warning) !important;
+}
+
+.btn-outline-warning:hover {
+    background: var(--ds-warning) !important;
+    color: #fff !important;
+    transform: translateY(-1px);
+}
+
+/* ============================================
+   Tables - refined headers, rows, badges
+   ============================================ */
+.table {
+    font-size: 0.875rem !important;
+    margin-bottom: 0 !important;
+    border-collapse: separate !important;
+    border-spacing: 0 !important;
+}
+
+.table thead th {
+    background: linear-gradient(180deg, #f8fafc 0%, #f1f5f9 100%) !important;
+    color: #475569 !important;
+    font-size: 0.78rem !important;
+    font-weight: 700 !important;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    padding: 0.85rem 0.85rem !important;
+    border-bottom: 2px solid #e2e8f0 !important;
+    white-space: nowrap;
+}
+
+.table tbody td {
+    padding: 0.85rem 0.85rem !important;
+    vertical-align: middle !important;
+    border-color: #f1f5f9 !important;
+    color: var(--ds-text);
+}
+
+.table-striped tbody tr:nth-of-type(odd) {
+    background-color: rgba(248, 250, 252, 0.6) !important;
+}
+
+.table-hover tbody tr {
+    transition: background-color 0.15s ease;
+}
+
+.table-hover tbody tr:hover {
+    background-color: rgba(92, 107, 192, 0.05) !important;
+}
+
+.table-bordered {
+    border: 1px solid var(--ds-border) !important;
+}
+
+.table-bordered th,
+.table-bordered td {
+    border: 1px solid #f1f5f9 !important;
+}
+
+/* ============================================
+   Badges - polished
+   ============================================ */
+.badge {
+    font-weight: 600 !important;
+    padding: 0.4em 0.7em !important;
+    border-radius: 0.4rem !important;
+    font-size: 0.78rem !important;
+    letter-spacing: 0.01em;
+}
+
+.badge.bg-success {
+    background-color: var(--ds-success) !important;
+}
+
+.badge.bg-danger {
+    background-color: var(--ds-danger) !important;
+}
+
+.badge.bg-warning {
+    background-color: var(--ds-warning) !important;
+}
+
+.badge.bg-info {
+    background-color: var(--ds-info) !important;
+}
+
+.badge.bg-primary {
+    background-color: var(--ds-primary) !important;
+}
+
+.badge.bg-secondary {
+    background-color: #64748b !important;
+}
+
+/* ============================================
+   Alerts - refined
+   ============================================ */
+.alert {
+    border-radius: var(--ds-radius-sm) !important;
+    font-size: 0.9rem !important;
+    border: none !important;
+    border-left: 4px solid !important;
+    padding: 0.85rem 1rem !important;
+    box-shadow: var(--ds-shadow-sm);
+}
+
+.alert-success {
+    background-color: #e8f5e9 !important;
+    color: #1b5e20 !important;
+    border-left-color: var(--ds-success) !important;
+}
+
+.alert-danger {
+    background-color: #ffebee !important;
+    color: #b71c1c !important;
+    border-left-color: var(--ds-danger) !important;
+}
+
+.alert-warning {
+    background-color: #fff3e0 !important;
+    color: #e65100 !important;
+    border-left-color: var(--ds-warning) !important;
+}
+
+.alert-info {
+    background-color: #e1f5fe !important;
+    color: #01579b !important;
+    border-left-color: var(--ds-info) !important;
+}
+
+/* ============================================
+   Pagination - refined
+   ============================================ */
+.pagination {
+    gap: 0.25rem !important;
+    margin-top: 1rem !important;
+}
+
+.page-link {
+    border-radius: 0.4rem !important;
+    border: 1px solid #e2e8f0 !important;
+    color: var(--ds-primary) !important;
+    font-size: 0.85rem !important;
+    padding: 0.45rem 0.8rem !important;
+    transition: var(--ds-transition);
+}
+
+.page-link:hover {
+    background-color: var(--ds-primary-light) !important;
+    border-color: var(--ds-primary) !important;
+    color: var(--ds-primary-dark) !important;
+}
+
+.page-item.active .page-link {
+    background: linear-gradient(135deg, var(--ds-primary), var(--ds-primary-dark)) !important;
+    border-color: transparent !important;
+    color: #fff !important;
+    box-shadow: 0 2px 8px rgba(92, 107, 192, 0.3);
+}
+
+.page-item.disabled .page-link {
+    color: #cbd5e1 !important;
+    background-color: transparent !important;
+}
+
+/* ============================================
+   Tabs - refined (editAttendance, etc.)
+   ============================================ */
+.nav-tabs {
+    border-bottom: 2px solid #e2e8f0 !important;
+    gap: 0.25rem;
+}
+
+.nav-tabs .nav-link {
+    border: none !important;
+    border-bottom: 2px solid transparent !important;
+    color: #64748b !important;
+    font-weight: 500 !important;
+    padding: 0.65rem 1rem !important;
+    transition: var(--ds-transition);
+    border-radius: 0.4rem 0.4rem 0 0 !important;
+    margin-bottom: -2px;
+}
+
+.nav-tabs .nav-link:hover {
+    color: var(--ds-primary) !important;
+    background-color: rgba(92, 107, 192, 0.04);
+}
+
+.nav-tabs .nav-link.active {
+    color: var(--ds-primary) !important;
+    background: transparent !important;
+    border-bottom-color: var(--ds-primary) !important;
+    font-weight: 600 !important;
+}
+
+/* ============================================
+   Stats / Counter Cards - consistent look
+   ============================================ */
+.app-card-stat {
+    border-radius: var(--ds-radius) !important;
+    transition: var(--ds-transition);
+    position: relative;
+    overflow: hidden;
+    border: 1px solid var(--ds-border) !important;
+    background: var(--ds-bg-elevated) !important;
+}
+
+.app-card-stat:hover {
+    transform: translateY(-4px);
+    box-shadow: var(--ds-shadow-lg) !important;
+}
+
+.app-card-stat::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 3px;
+    background: linear-gradient(90deg, var(--ds-accent), var(--ds-accent-2));
+    transform: scaleX(0);
+    transform-origin: left;
+    transition: transform 0.3s ease;
+}
+
+.app-card-stat:hover::before {
+    transform: scaleX(1);
+}
+
+/* ============================================
+   Student Card (takelecatt) - refinement
+   ============================================ */
+.student-card {
+    border-radius: var(--ds-radius-sm) !important;
+    border: 2px solid #e2e8f0 !important;
+    padding: 0.85rem !important;
+    transition: var(--ds-transition) !important;
+    display: block;
+    width: 100%;
+    background-color: #fff;
+    cursor: pointer;
+    height: 100%;
+}
+
+.student-card:hover {
+    border-color: var(--ds-primary) !important;
+    background-color: rgba(92, 107, 192, 0.04) !important;
+    transform: translateY(-2px);
+    box-shadow: var(--ds-shadow-md);
+}
+
+.student-card.border-success {
+    border-color: var(--ds-success) !important;
+    background-color: rgba(67, 160, 71, 0.06) !important;
+}
+
+.student-card .student-info {
+    font-size: 0.85rem;
+    line-height: 1.45;
+}
+
+.student-card .student-info strong {
+    font-size: 0.78rem;
+    color: var(--ds-primary-dark);
+    display: block;
+    font-weight: 700;
+    margin-bottom: 2px;
+}
+
+/* ============================================
+   Modal - refined
+   ============================================ */
+.modal-content {
+    border-radius: var(--ds-radius) !important;
+    border: none !important;
+    box-shadow: 0 20px 50px rgba(0, 0, 0, 0.15) !important;
+}
+
+.modal-header {
+    background: linear-gradient(135deg, #f8fafc, #f1f5f9);
+    border-bottom: 1px solid var(--ds-border) !important;
+    border-radius: var(--ds-radius) var(--ds-radius) 0 0 !important;
+    padding: 1rem 1.25rem !important;
+}
+
+.modal-title {
+    font-weight: 600 !important;
+    color: var(--ds-text);
+    font-size: 1.05rem !important;
+}
+
+.modal-footer {
+    background: #f8fafc;
+    border-top: 1px solid var(--ds-border) !important;
+    border-radius: 0 0 var(--ds-radius) var(--ds-radius) !important;
+}
+
+/* ============================================
+   Quick Access Cards (home.php) - polish
+   ============================================ */
+.quick-access-card {
+    background: var(--ds-bg-elevated) !important;
+    border: 1px solid var(--ds-border) !important;
+    border-radius: var(--ds-radius) !important;
+    transition: var(--ds-transition);
+    box-shadow: var(--ds-shadow-sm) !important;
+}
+
+.quick-access-card:hover {
+    transform: translateY(-6px) !important;
+    box-shadow: var(--ds-shadow-lg) !important;
+    border-color: var(--ds-primary-light) !important;
+}
+
+.quick-access-card-body {
+    padding: 1.75rem 1.25rem !important;
+}
+
+.icon-wrapper {
+    box-shadow: 0 6px 16px rgba(0, 0, 0, 0.1) !important;
+}
+
+/* ============================================
+   Quick Links buttons (home.php)
+   ============================================ */
+.quick-link-btn {
+    background: #fff !important;
+    border: 1.5px solid #e2e8f0 !important;
+    color: var(--ds-primary) !important;
+    border-radius: var(--ds-radius-sm) !important;
+    transition: var(--ds-transition);
+}
+
+.quick-link-btn:hover {
+    background: linear-gradient(135deg, var(--ds-accent), var(--ds-accent-2)) !important;
+    color: #fff !important;
+    border-color: transparent !important;
+    transform: translateY(-3px) !important;
+    box-shadow: 0 8px 16px rgba(102, 126, 234, 0.25) !important;
+}
+
+/* ============================================
+   Dashboard header (home.php)
+   ============================================ */
+.dashboard-header {
+    background: linear-gradient(135deg, var(--ds-accent) 0%, var(--ds-accent-2) 100%) !important;
+    border-radius: var(--ds-radius) !important;
+    box-shadow: 0 8px 24px rgba(102, 126, 234, 0.2) !important;
+}
+
+/* ============================================
+   Search input in header
+   ============================================ */
+.search-input {
+    border-radius: var(--ds-radius-sm) !important;
+    border: 1.5px solid #e2e8f0 !important;
+    transition: var(--ds-transition) !important;
+}
+
+.search-input:focus {
+    border-color: var(--ds-primary) !important;
+    box-shadow: 0 0 0 4px rgba(92, 107, 192, 0.12) !important;
+    outline: none;
+}
+
+/* ============================================
+   Sidebar nav - subtle polish (no structure change)
+   ============================================ */
+.app-nav-main .nav-link {
+    transition: var(--ds-transition);
+    border-radius: 0.4rem;
+}
+
+.app-nav-main .nav-link:hover {
+    background-color: rgba(92, 107, 192, 0.06);
+}
+
+.app-nav-main .nav-link.active {
+    background: linear-gradient(135deg, rgba(102, 126, 234, 0.1), rgba(118, 75, 162, 0.06));
+    color: var(--ds-primary-dark);
+    font-weight: 600;
+}
+
+.submenu-link {
+    border-radius: 0.35rem;
+    transition: var(--ds-transition);
+}
+
+.submenu-link:hover {
+    background-color: rgba(92, 107, 192, 0.05);
+    padding-left: 1.25rem !important;
+}
+
+/* ============================================
+   Quick Manage / Quick Links sections
+   ============================================ */
+.quick-links-section {
+    background: var(--ds-bg-elevated) !important;
+    border-radius: var(--ds-radius) !important;
+    border: 1px solid var(--ds-border) !important;
+    box-shadow: var(--ds-shadow-sm) !important;
+}
+
+.quick-links-section h3 {
+    font-size: 1.1rem !important;
+    color: var(--ds-text) !important;
+}
+
+.quick-links-section h3::before {
+    background: linear-gradient(180deg, var(--ds-accent), var(--ds-accent-2)) !important;
+}
+
+/* ============================================
+   Lecture Details / Detail Row (takelecatt)
+   ============================================ */
+.app-card-body [style*="text-transform:uppercase"] {
+    color: #94a3b8;
+    letter-spacing: 0.05em;
+}
+
+/* ============================================
+   Empty state (e.g., "no records found")
+   ============================================ */
+.empty-state {
+    text-align: center;
+    padding: 3rem 1rem;
+    color: var(--ds-text-muted);
+}
+
+.empty-state i {
+    font-size: 3rem;
+    color: #cbd5e1;
+    margin-bottom: 1rem;
+    display: block;
+}
+
+/* ============================================
+   File input - polish
+   ============================================ */
+input[type="file"].form-control {
+    padding: 0.5rem !important;
+}
+
+input[type="file"].form-control::file-selector-button {
+    background: linear-gradient(135deg, var(--ds-primary), var(--ds-primary-dark));
+    color: #fff;
+    border: none;
+    padding: 0.4rem 0.9rem;
+    margin-right: 0.85rem;
+    border-radius: 0.35rem;
+    font-weight: 500;
+    cursor: pointer;
+    transition: var(--ds-transition);
+}
+
+input[type="file"].form-control::file-selector-button:hover {
+    background: linear-gradient(135deg, var(--ds-primary-dark), #283593);
+}
+
+/* ============================================
+   Sticky table header (myAttendance)
+   ============================================ */
+.table thead.sticky-top th {
+    position: sticky;
+    top: 56px;
+    z-index: 5;
+}
+
+/* ============================================
+   Smooth focus visibility for keyboard users
+   ============================================ */
+.btn:focus-visible,
+.form-control:focus-visible,
+.form-select:focus-visible {
+    outline: 2px solid var(--ds-primary);
+    outline-offset: 2px;
+}
+
+/* ============================================
+   Scrollbar - subtle polish
+   ============================================ */
+::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+}
+
+::-webkit-scrollbar-track {
+    background: #f1f5f9;
+}
+
+::-webkit-scrollbar-thumb {
+    background: #cbd5e1;
+    border-radius: 5px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+    background: #94a3b8;
+}
+
+/* ============================================
+   Print friendly
+   ============================================ */
+@media print {
+    .app-sidepanel,
+    .app-header,
+    .app-footer,
+    .btn,
+    .pagination,
+    .nav-tabs {
+        display: none !important;
+    }
+
+    .app-wrapper {
+        margin-left: 0 !important;
+    }
+
+    .app-card {
+        box-shadow: none !important;
+        border: 1px solid #ddd !important;
+    }
+}
+
+/* ============================================
+   Responsive - small screen refinements
+   ============================================ */
+@media (max-width: 575.98px) {
+    .app-card-body {
+        padding: 1rem !important;
+    }
+
+    .table thead th,
+    .table tbody td {
+        padding: 0.65rem 0.5rem !important;
+        font-size: 0.825rem !important;
+    }
+
+    .btn {
+        font-size: 0.825rem !important;
+    }
+
+    .btn-sm {
+        padding: 0.35rem 0.65rem !important;
+    }
+}
