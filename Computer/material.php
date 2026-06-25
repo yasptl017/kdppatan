@@ -92,20 +92,28 @@ $page_title = "Materials - " . $DEPARTMENT_NAME . " - K.D. Polytechnic";
                             </thead>
                             <tbody>
                                 <?php $i = 1; while ($material = $material_result->fetch_assoc()): ?>
-                                    <tr>
-                                        <td><?php echo $i++; ?></td>
-                                        <td><?php echo htmlspecialchars($material['subject']); ?></td>
-                                        <td><?php echo htmlspecialchars($material['title']); ?></td>
-                                        <td><?php echo (int)$material['display_order']; ?></td>
-                                        <td>
-                                            <a href="../Admin/<?php echo htmlspecialchars($material['file_path']); ?>"
-                                               class="btn btn-accent btn-sm"
-                                               target="_blank">
-                                                <i class="fas fa-download me-2"></i>View
-                                            </a>
-                                        </td>
-                                    </tr>
-                                <?php endwhile; ?>
+                                        <tr>
+                                            <td><?php echo $i++; ?></td>
+                                            <td><?php echo htmlspecialchars($material['subject']); ?></td>
+                                            <td><?php echo htmlspecialchars($material['title']); ?></td>
+                                            <td><?php echo (int)$material['display_order']; ?></td>
+                                            <td>
+                                                <?php if (!empty($material['material_url'])): ?>
+                                                    <a href="<?php echo htmlspecialchars($material['material_url']); ?>"
+                                                       class="btn btn-accent btn-sm"
+                                                       target="_blank" rel="noopener noreferrer">
+                                                        <i class="fas fa-external-link-alt me-2"></i>Open Link
+                                                    </a>
+                                                <?php else: ?>
+                                                    <a href="../Admin/<?php echo htmlspecialchars($material['file_path']); ?>"
+                                                       class="btn btn-accent btn-sm"
+                                                       target="_blank">
+                                                        <i class="fas fa-download me-2"></i>View
+                                                    </a>
+                                                <?php endif; ?>
+                                            </td>
+                                        </tr>
+                                    <?php endwhile; ?>
                             </tbody>
                         </table>
                     </div>

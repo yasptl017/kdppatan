@@ -166,11 +166,19 @@ $page_title = "Materials - " . $DEPARTMENT_NAME . " - K.D. Polytechnic";
                                         <?php echo htmlspecialchars($material['title']); ?>
                                     </h5>
                                 </div>
-                                <a href="../Admin/<?php echo htmlspecialchars($material['file_path']); ?>"
-                                   class="btn btn-accent btn-sm w-100 mt-auto"
-                                   target="_blank">
-                                    <i class="fas fa-download me-2"></i>Download / View
-                                </a>
+                                <?php if (!empty($material['material_url'])): ?>
+                                    <a href="<?php echo htmlspecialchars($material['material_url']); ?>"
+                                       class="btn btn-accent btn-sm w-100 mt-auto"
+                                       target="_blank" rel="noopener noreferrer">
+                                        <i class="fas fa-external-link-alt me-2"></i>Open Link
+                                    </a>
+                                <?php else: ?>
+                                    <a href="../Admin/<?php echo htmlspecialchars($material['file_path']); ?>"
+                                       class="btn btn-accent btn-sm w-100 mt-auto"
+                                       target="_blank">
+                                        <i class="fas fa-download me-2"></i>Download / View
+                                    </a>
+                                <?php endif; ?>
                             </div>
                         </div>
                     <?php endwhile; ?>

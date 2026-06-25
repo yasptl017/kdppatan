@@ -16,6 +16,7 @@ $conn->query("
         title varchar(255) NOT NULL,
         display_order int(11) NOT NULL DEFAULT 0,
         file_path varchar(255) NOT NULL,
+        material_url varchar(500) DEFAULT NULL,
         created_at timestamp NOT NULL DEFAULT current_timestamp(),
         updated_at timestamp NOT NULL DEFAULT current_timestamp() ON UPDATE current_timestamp(),
         PRIMARY KEY (id),
@@ -24,6 +25,12 @@ $conn->query("
         KEY display_order (display_order)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci
 ");
+
+// Add material_url column if it doesn't exist (for existing tables)
+$colCheck = $conn->query("SHOW COLUMNS FROM dept_material LIKE 'material_url'");
+if ($colCheck && $colCheck->num_rows === 0) {
+    $conn->query("ALTER TABLE dept_material ADD COLUMN material_url varchar(500) DEFAULT NULL AFTER file_path");
+}
 
 $uploadDir = "uploads/dept_material/";
 if (!file_exists($uploadDir)) {
@@ -36,6 +43,8 @@ if (isset($_POST['save_material'])) {
     $subject = $conn->real_escape_string($_POST['subject']);
     $title = $conn->real_escape_string($_POST['title']);
     $display_order = intval($_POST['display_order']);
+    $material_url = $conn->real_escape_string(trim($_POST['material_url'] ?? ''));
+    $upload_type = $_POST['upload_type'] ?? 'file';
 
     $oldFile = "";
     if ($id > 0) {
@@ -46,31 +55,39 @@ if (isset($_POST['save_material'])) {
     }
 
     $filePath = $oldFile;
-    if (isset($_FILES['file']) && $_FILES['file']['error'] === 0) {
-        $allowed = ['pdf', 'doc', 'docx', 'ppt', 'pptx', 'jpg', 'jpeg', 'png', 'gif', 'webp', 'xlsx', 'xls', 'zip', 'rar'];
-        $ext = strtolower(pathinfo($_FILES['file']['name'], PATHINFO_EXTENSION));
+    if ($upload_type === 'file') {
+        $material_url = ''; // Clear URL if file upload is chosen
+        if (isset($_FILES['file']) && $_FILES['file']['error'] === 0) {
+            $allowed = ['pdf', 'doc', 'docx', 'ppt', 'pptx', 'jpg', 'jpeg', 'png', 'gif', 'webp', 'xlsx', 'xls', 'zip', 'rar'];
+            $ext = strtolower(pathinfo($_FILES['file']['name'], PATHINFO_EXTENSION));
 
-        if (in_array($ext, $allowed)) {
-            $filePath = $uploadDir . "dept_material_" . time() . "_" . rand(1000, 9999) . "." . $ext;
-            if (move_uploaded_file($_FILES['file']['tmp_name'], $filePath)) {
-                if (!empty($oldFile) && file_exists($oldFile)) {
-                    unlink($oldFile);
+            if (in_array($ext, $allowed)) {
+                $filePath = $uploadDir . "dept_material_" . time() . "_" . rand(1000, 9999) . "." . $ext;
+                if (move_uploaded_file($_FILES['file']['tmp_name'], $filePath)) {
+                    if (!empty($oldFile) && file_exists($oldFile)) {
+                        unlink($oldFile);
+                    }
                 }
+            } else {
+                $message = "Invalid file type. Please upload PDF, DOC, PPT, image, Excel, ZIP, or RAR files.";
+                $messageType = "danger";
             }
-        } else {
-            $message = "Invalid file type. Please upload PDF, DOC, PPT, image, Excel, ZIP, or RAR files.";
-            $messageType = "danger";
+        }
+    } else {
+        // URL upload type - clear file path if new entry
+        if ($id === 0) {
+            $filePath = '';
         }
     }
 
     if (empty($message)) {
         if ($id === 0) {
-            if (empty($filePath)) {
-                $message = "Please upload a file.";
+            if (empty($filePath) && empty($material_url)) {
+                $message = "Please upload a file or provide a URL.";
                 $messageType = "danger";
             } else {
-                $sql = "INSERT INTO dept_material (department, subject, title, display_order, file_path)
-                        VALUES ('$department', '$subject', '$title', $display_order, '$filePath')";
+                $sql = "INSERT INTO dept_material (department, subject, title, display_order, file_path, material_url)
+                        VALUES ('$department', '$subject', '$title', $display_order, '$filePath', '$material_url')";
                 if ($conn->query($sql)) {
                     $message = "Material added successfully!";
                     $messageType = "success";
@@ -85,7 +102,8 @@ if (isset($_POST['save_material'])) {
                         subject='$subject',
                         title='$title',
                         display_order=$display_order,
-                        file_path='$filePath'
+                        file_path='$filePath',
+                        material_url='$material_url'
                     WHERE id=$id";
             if ($conn->query($sql)) {
                 $message = "Material updated successfully!";
@@ -244,11 +262,28 @@ if ($_SESSION['role'] == 'Admin') {
                     </div>
 
                     <div class="mb-3">
+                        <label class="form-label">Upload Type *</label>
+                        <div class="btn-group w-100" role="group">
+                            <input type="radio" class="btn-check" name="upload_type" id="upload_type_file" value="file" checked>
+                            <label class="btn btn-outline-primary" for="upload_type_file"><i class="fas fa-file-upload me-1"></i>Upload File</label>
+                            <input type="radio" class="btn-check" name="upload_type" id="upload_type_url" value="url">
+                            <label class="btn btn-outline-primary" for="upload_type_url"><i class="fas fa-link me-1"></i>External URL</label>
+                        </div>
+                    </div>
+
+                    <div class="mb-3" id="file_upload_section">
                         <label for="file" class="form-label">Upload File *</label>
                         <input type="file" name="file" id="file" class="form-control"
                                accept=".pdf,.doc,.docx,.ppt,.pptx,.jpg,.jpeg,.png,.gif,.webp,.xlsx,.xls,.zip,.rar">
                         <small class="text-muted">Supported: PDF, DOC, PPT, Images, Excel, ZIP, RAR</small>
                         <div id="currentFile" class="mt-2"></div>
+                    </div>
+
+                    <div class="mb-3" id="url_upload_section" style="display:none;">
+                        <label for="material_url" class="form-label">Material URL *</label>
+                        <input type="url" name="material_url" id="material_url" class="form-control" placeholder="https://example.com/material.pdf">
+                        <small class="text-muted">Enter the full URL (opens in new tab when viewed)</small>
+                        <div id="currentUrl" class="mt-2"></div>
                     </div>
                 </div>
                 <div class="modal-footer">
@@ -271,16 +306,44 @@ if ($_SESSION['role'] == 'Admin') {
         });
     });
 
+    // Toggle between file upload and URL input
+    document.querySelectorAll('input[name="upload_type"]').forEach(function(radio) {
+        radio.addEventListener('change', function() {
+            toggleUploadType(this.value);
+        });
+    });
+
+    function toggleUploadType(type) {
+        const fileSection = document.getElementById('file_upload_section');
+        const urlSection = document.getElementById('url_upload_section');
+        const fileInput = document.getElementById('file');
+        const urlInput = document.getElementById('material_url');
+
+        if (type === 'file') {
+            fileSection.style.display = 'block';
+            urlSection.style.display = 'none';
+            urlInput.removeAttribute('required');
+        } else {
+            fileSection.style.display = 'none';
+            urlSection.style.display = 'block';
+            fileInput.removeAttribute('required');
+        }
+    }
+
     function addMaterial() {
         document.getElementById('material_id').value = '0';
         document.getElementById('subject').value = '';
         document.getElementById('title').value = '';
         document.getElementById('display_order').value = '0';
         document.getElementById('file').value = '';
+        document.getElementById('material_url').value = '';
         document.getElementById('department').value = <?php echo json_encode($defaultDept); ?>;
         document.getElementById('modalTitle').textContent = 'Add Material';
         document.getElementById('file').setAttribute('required', 'required');
         document.getElementById('currentFile').innerHTML = '';
+        document.getElementById('currentUrl').innerHTML = '';
+        document.getElementById('upload_type_file').checked = true;
+        toggleUploadType('file');
     }
 
     function editMaterial(data) {
@@ -292,9 +355,23 @@ if ($_SESSION['role'] == 'Admin') {
         document.getElementById('file').value = '';
         document.getElementById('file').removeAttribute('required');
         document.getElementById('modalTitle').textContent = 'Edit Material';
-        document.getElementById('currentFile').innerHTML = data.file_path
-            ? '<div class="alert alert-info py-2 mb-0"><strong>Current file:</strong> <a href="' + data.file_path + '" target="_blank">View File</a></div>'
-            : '';
+
+        // Determine if this entry uses URL or file
+        if (data.material_url && data.material_url.trim() !== '') {
+            document.getElementById('upload_type_url').checked = true;
+            toggleUploadType('url');
+            document.getElementById('material_url').value = data.material_url;
+            document.getElementById('currentUrl').innerHTML = '<div class="alert alert-info py-2 mb-0"><strong>Current URL:</strong> <a href="' + data.material_url + '" target="_blank">' + data.material_url + '</a></div>';
+            document.getElementById('currentFile').innerHTML = '';
+        } else {
+            document.getElementById('upload_type_file').checked = true;
+            toggleUploadType('file');
+            document.getElementById('material_url').value = '';
+            document.getElementById('currentUrl').innerHTML = '';
+            document.getElementById('currentFile').innerHTML = data.file_path
+                ? '<div class="alert alert-info py-2 mb-0"><strong>Current file:</strong> <a href="' + data.file_path + '" target="_blank">View File</a></div>'
+                : '';
+        }
     }
 
     document.getElementById('materialModal').addEventListener('hidden.bs.modal', function () {
@@ -302,8 +379,12 @@ if ($_SESSION['role'] == 'Admin') {
         document.getElementById('title').value = '';
         document.getElementById('display_order').value = '0';
         document.getElementById('file').value = '';
+        document.getElementById('material_url').value = '';
         document.getElementById('file').removeAttribute('required');
         document.getElementById('currentFile').innerHTML = '';
+        document.getElementById('currentUrl').innerHTML = '';
+        document.getElementById('upload_type_file').checked = true;
+        toggleUploadType('file');
     });
 </script>
 </body>
