@@ -33,13 +33,16 @@ $conn->query("CREATE TABLE IF NOT EXISTS `tutmapping` (
     `sem`         VARCHAR(10)  NOT NULL,
     `subject`     VARCHAR(100) NOT NULL,
     `tutBatch`    VARCHAR(30)  NOT NULL,
-    `slot`        VARCHAR(50)  NOT NULL,
+    `slot`        TEXT         NOT NULL,
     `start_date`  DATE         NOT NULL,
     `end_date`    DATE         NOT NULL,
     `repeat_days` VARCHAR(20)  NOT NULL COMMENT '0=Sun,1=Mon,...,6=Sat comma-separated',
     `created_at`  DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
     PRIMARY KEY (`id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+
+// Ensure slot column is TEXT (not VARCHAR) to hold JSON strings
+$conn->query("ALTER TABLE tutmapping MODIFY slot TEXT NOT NULL");
 
 $success_msg = '';
 $error_msg = '';
@@ -116,23 +119,42 @@ $form_defaults = [
     'start_date' => $default_date,
     'end_date' => $default_date,
     'repeat_days' => [],
+    'day_slots' => [],
 ];
 
 $form_values = $form_defaults;
 if ($editing_mapping) {
+    $stored_slot = (string)$editing_mapping['slot'];
+    $repeat_days = array_values(array_unique(array_filter(
+        array_map('intval', explode(',', (string)$editing_mapping['repeat_days'])),
+        static fn($day) => $day >= 0 && $day <= 6
+    )));
+    $day_slots = [];
+    if ($stored_slot !== '' && $stored_slot[0] === '{') {
+        $parsed = json_decode($stored_slot, true);
+        if (is_array($parsed)) {
+            foreach ($parsed as $k => $v) {
+                $day_slots[(int)$k] = $v;
+            }
+            $repeat_days = array_keys($day_slots);
+            sort($repeat_days);
+        }
+    } elseif ($stored_slot !== '') {
+        foreach ($repeat_days as $d) {
+            $day_slots[(string)$d] = $stored_slot;
+        }
+    }
     $form_values = [
         'faculty' => (string)$editing_mapping['faculty'],
         'term' => (string)$editing_mapping['term'],
         'sem' => (string)$editing_mapping['sem'],
         'subject' => (string)$editing_mapping['subject'],
         'tutBatch' => (string)$editing_mapping['tutBatch'],
-        'slot' => (string)$editing_mapping['slot'],
+        'slot' => $stored_slot,
         'start_date' => (string)$editing_mapping['start_date'],
         'end_date' => (string)$editing_mapping['end_date'],
-        'repeat_days' => array_values(array_unique(array_filter(
-            array_map('intval', explode(',', (string)$editing_mapping['repeat_days'])),
-            static fn($day) => $day >= 0 && $day <= 6
-        ))),
+        'repeat_days' => $repeat_days,
+        'day_slots' => $day_slots,
     ];
 }
 
@@ -144,13 +166,25 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['save_mapping'])) {
     $sem         = trim((string)($_POST['sem'] ?? ''));
     $subject     = trim((string)($_POST['subject'] ?? ''));
     $tutBatch    = trim((string)($_POST['tutBatch'] ?? ''));
-    $slot        = trim((string)($_POST['slot'] ?? ''));
     $start_date  = trim((string)($_POST['start_date'] ?? ''));
     $end_date    = trim((string)($_POST['end_date'] ?? ''));
+
+    // Build day_slots from POST (each day has its own slot)
+    $day_slots = [];
+    $selected_days = [];
+    for ($d = 0; $d <= 6; $d++) {
+        $slot_val = trim((string)($_POST['day_slot_' . $d] ?? ''));
+        if ($slot_val !== '') {
+            $day_slots[(string)$d] = $slot_val;
+            $selected_days[] = $d;
+        }
+    }
     $repeat_days = array_values(array_unique(array_filter(
-        array_map('intval', (array)($_POST['repeat_days'] ?? [])),
+        array_map('intval', $selected_days),
         static fn($day) => $day >= 0 && $day <= 6
     )));
+    sort($repeat_days);
+    $slot_json = json_encode($day_slots, JSON_FORCE_OBJECT);
 
     $form_values = [
         'faculty' => $faculty,
@@ -158,14 +192,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['save_mapping'])) {
         'sem' => $sem,
         'subject' => $subject,
         'tutBatch' => $tutBatch,
-        'slot' => $slot,
+        'slot' => $slot_json,
         'start_date' => $start_date,
         'end_date' => $end_date,
         'repeat_days' => $repeat_days,
+        'day_slots' => $day_slots,
     ];
 
-    if ($faculty === '' || $term === '' || $sem === '' || $subject === '' || $tutBatch === '' || $slot === '' || $start_date === '' || $end_date === '' || empty($repeat_days)) {
-        $error_msg = 'All fields are required including at least one repeat day.';
+    if ($faculty === '' || $term === '' || $sem === '' || $subject === '' || $tutBatch === '' || $start_date === '' || $end_date === '' || empty($repeat_days)) {
+        $error_msg = 'All fields are required including at least one day with a slot selected.';
     } elseif ($end_date < $start_date) {
         $error_msg = 'End date must be on or after start date.';
     } else {
@@ -182,7 +217,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['save_mapping'])) {
                 $error_msg = 'Mapping not found for update.';
             } else {
                 $stmt = $conn->prepare("UPDATE tutmapping SET faculty = ?, term = ?, sem = ?, subject = ?, tutBatch = ?, slot = ?, start_date = ?, end_date = ?, repeat_days = ? WHERE id = ? AND faculty = ?");
-                $stmt->bind_param('sssssssssis', $faculty, $term, $sem, $subject, $tutBatch, $slot, $start_date, $end_date, $repeat_days_csv, $mapping_id, $logged_faculty_id);
+                $stmt->bind_param('sssssssssis', $faculty, $term, $sem, $subject, $tutBatch, $slot_json, $start_date, $end_date, $repeat_days_csv, $mapping_id, $logged_faculty_id);
                 if ($stmt->execute()) {
                     $success_msg = 'Tutorial mapping updated successfully.';
                     $edit_id = $mapping_id;
@@ -193,7 +228,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['save_mapping'])) {
             }
         } else {
             $stmt = $conn->prepare("INSERT INTO tutmapping (faculty, term, sem, subject, tutBatch, slot, start_date, end_date, repeat_days) VALUES (?,?,?,?,?,?,?,?,?)");
-            $stmt->bind_param('sssssssss', $faculty, $term, $sem, $subject, $tutBatch, $slot, $start_date, $end_date, $repeat_days_csv);
+            $stmt->bind_param('sssssssss', $faculty, $term, $sem, $subject, $tutBatch, $slot_json, $start_date, $end_date, $repeat_days_csv);
             if ($stmt->execute()) {
                 $success_msg = 'Tutorial mapping saved successfully.';
                 $form_values = $form_defaults;
@@ -279,7 +314,7 @@ $day_names = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
             <?php endif; ?>
 
             <div class="row g-4">
-                <div class="col-12 col-lg-5">
+                <div class="col-12">
                     <div class="app-card shadow-sm">
                         <div class="app-card-body">
                             <div class="d-flex justify-content-between align-items-center mb-3">
@@ -292,115 +327,133 @@ $day_names = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
                             <form method="POST" action="<?= htmlspecialchars($form_action) ?>">
                                 <input type="hidden" name="mapping_id" value="<?= $is_edit_mode ? (int)$edit_id : 0 ?>">
 
-                                <div class="mb-3">
-                                    <label class="form-label">Faculty Name</label>
-                                    <select name="faculty" class="form-control" required>
-                                        <option value="">Select Faculty</option>
-                                        <?php if ($faculty_result): ?>
-                                            <?php $faculty_result->data_seek(0); while ($fac = $faculty_result->fetch_assoc()): ?>
-                                                <option value="<?= htmlspecialchars((string)$fac['id']) ?>" <?= ((string)$fac['id'] === (string)$form_values['faculty']) ? 'selected' : '' ?>>
-                                                    <?= htmlspecialchars($fac['Name']) ?>
-                                                </option>
-                                            <?php endwhile; ?>
-                                        <?php endif; ?>
-                                    </select>
-                                </div>
+                                <div class="row g-3 mb-3">
+                                    <div class="col-12 col-md-3">
+                                        <label class="form-label">Faculty Name</label>
+                                        <select name="faculty" class="form-control" required>
+                                            <option value="">Select Faculty</option>
+                                            <?php if ($faculty_result): ?>
+                                                <?php $faculty_result->data_seek(0); while ($fac = $faculty_result->fetch_assoc()): ?>
+                                                    <option value="<?= htmlspecialchars((string)$fac['id']) ?>" <?= ((string)$fac['id'] === (string)$form_values['faculty']) ? 'selected' : '' ?>>
+                                                        <?= htmlspecialchars($fac['Name']) ?>
+                                                    </option>
+                                                <?php endwhile; ?>
+                                            <?php endif; ?>
+                                        </select>
+                                    </div>
 
-                                <div class="mb-3">
-                                    <label class="form-label">Term</label>
-                                    <select name="term" class="form-control" required>
-                                        <option value="">Select Term</option>
-                                        <?php foreach ($term_rows as $tr): ?>
-                                            <option value="<?= htmlspecialchars($tr) ?>" <?= ((string)$tr === (string)$form_values['term']) ? 'selected' : '' ?>><?= htmlspecialchars($tr) ?></option>
-                                        <?php endforeach; ?>
-                                    </select>
-                                </div>
+                                    <div class="col-6 col-md-1">
+                                        <label class="form-label">Term</label>
+                                        <select name="term" class="form-control" required>
+                                            <option value="">Term</option>
+                                            <?php foreach ($term_rows as $tr): ?>
+                                                <option value="<?= htmlspecialchars($tr) ?>" <?= ((string)$tr === (string)$form_values['term']) ? 'selected' : '' ?>><?= htmlspecialchars($tr) ?></option>
+                                            <?php endforeach; ?>
+                                        </select>
+                                    </div>
 
-                                <div class="mb-3">
-                                    <label class="form-label">Semester</label>
-                                    <select name="sem" class="form-control" id="semSelect" required>
-                                        <option value="">Select Semester</option>
-                                        <?php if ($sem_result): ?>
-                                            <?php while ($sem = $sem_result->fetch_assoc()): ?>
-                                                <option value="<?= htmlspecialchars((string)$sem['sem']) ?>" <?= ((string)$sem['sem'] === (string)$form_values['sem']) ? 'selected' : '' ?>>
-                                                    <?= htmlspecialchars((string)$sem['sem']) ?>
-                                                </option>
-                                            <?php endwhile; ?>
-                                        <?php endif; ?>
-                                    </select>
-                                </div>
+                                    <div class="col-6 col-md-1">
+                                        <label class="form-label">Semester</label>
+                                        <select name="sem" class="form-control" id="semSelect" required>
+                                            <option value="">Sem</option>
+                                            <?php if ($sem_result): ?>
+                                                <?php $sem_result->data_seek(0); while ($sem = $sem_result->fetch_assoc()): ?>
+                                                    <option value="<?= htmlspecialchars((string)$sem['sem']) ?>" <?= ((string)$sem['sem'] === (string)$form_values['sem']) ? 'selected' : '' ?>>
+                                                        <?= htmlspecialchars((string)$sem['sem']) ?>
+                                                    </option>
+                                                <?php endwhile; ?>
+                                            <?php endif; ?>
+                                        </select>
+                                    </div>
 
-                                <div class="mb-3">
-                                    <label class="form-label">Subject</label>
-                                    <select name="subject" class="form-control" id="subjectSelect" required>
-                                        <option value="">Select Semester first</option>
-                                    </select>
-                                </div>
+                                    <div class="col-12 col-md-3">
+                                        <label class="form-label">Subject</label>
+                                        <select name="subject" class="form-control" id="subjectSelect" required>
+                                            <option value="">Select Semester first</option>
+                                        </select>
+                                    </div>
 
-                                <div class="mb-3">
-                                    <label class="form-label">Tutorial Batch</label>
-                                    <select name="tutBatch" class="form-control" required>
-                                        <option value="">Select Tutorial Batch</option>
-                                        <?php if ($tut_batch_result): ?>
-                                            <?php while ($tut = $tut_batch_result->fetch_assoc()): ?>
-                                                <?php $tut_batch = (string)$tut['tutBatch']; ?>
-                                                <option value="<?= htmlspecialchars($tut_batch) ?>" <?= ($tut_batch === (string)$form_values['tutBatch']) ? 'selected' : '' ?>>
-                                                    <?= htmlspecialchars($tut_batch) ?>
-                                                </option>
-                                            <?php endwhile; ?>
-                                        <?php endif; ?>
-                                    </select>
-                                </div>
+                                    <div class="col-12 col-md-2">
+                                        <label class="form-label">Tutorial Batch</label>
+                                        <select name="tutBatch" class="form-control" required>
+                                            <option value="">Select Batch</option>
+                                            <?php if ($tut_batch_result): ?>
+                                                <?php $tut_batch_result->data_seek(0); while ($tut = $tut_batch_result->fetch_assoc()): ?>
+                                                    <?php $tut_batch = (string)$tut['tutBatch']; ?>
+                                                    <option value="<?= htmlspecialchars($tut_batch) ?>" <?= ($tut_batch === (string)$form_values['tutBatch']) ? 'selected' : '' ?>>
+                                                        <?= htmlspecialchars($tut_batch) ?>
+                                                    </option>
+                                                <?php endwhile; ?>
+                                            <?php endif; ?>
+                                        </select>
+                                    </div>
 
-                                <div class="mb-3">
-                                    <label class="form-label">Slot</label>
-                                    <select name="slot" class="form-control" required>
-                                        <option value="">Select Slot</option>
-                                        <?php if ($slot_result): ?>
-                                            <?php while ($slot = $slot_result->fetch_assoc()): ?>
-                                                <?php $slot_name = (string)$slot['timeslot']; ?>
-                                                <option value="<?= htmlspecialchars($slot_name) ?>" <?= ($slot_name === (string)$form_values['slot']) ? 'selected' : '' ?>>
-                                                    <?= htmlspecialchars($slot_name) ?>
-                                                </option>
-                                            <?php endwhile; ?>
-                                        <?php endif; ?>
-                                    </select>
-                                </div>
-
-                                <div class="row g-2 mb-3">
-                                    <div class="col-6">
-                                        <label class="form-label">Repeat Start Date</label>
+                                    <div class="col-6 col-md-1">
+                                        <label class="form-label">Start Date</label>
                                         <input type="date" name="start_date" class="form-control" value="<?= htmlspecialchars((string)$form_values['start_date']) ?>" required>
                                     </div>
-                                    <div class="col-6">
-                                        <label class="form-label">Repeat End Date</label>
+
+                                    <div class="col-6 col-md-1">
+                                        <label class="form-label">End Date</label>
                                         <input type="date" name="end_date" class="form-control" value="<?= htmlspecialchars((string)$form_values['end_date']) ?>" required>
                                     </div>
                                 </div>
 
-                                <div class="mb-4">
-                                    <label class="form-label">Repeat on Day(s)</label>
-                                    <div class="d-flex flex-wrap gap-2">
-                                        <?php foreach ([1 => 'Mon', 2 => 'Tue', 3 => 'Wed', 4 => 'Thu', 5 => 'Fri', 6 => 'Sat', 0 => 'Sun'] as $num => $name): ?>
-                                            <?php $checked = in_array((int)$num, (array)$form_values['repeat_days'], true); ?>
-                                            <label class="btn <?= $checked ? 'btn-primary' : 'btn-outline-primary' ?> btn-sm px-3 day-toggle" style="cursor:pointer;">
-                                                <input type="checkbox" name="repeat_days[]" value="<?= $num ?>" class="d-none" <?= $checked ? 'checked' : '' ?>>
-                                                <?= $name ?>
-                                            </label>
-                                        <?php endforeach; ?>
+                                <div class="mb-3">
+                                    <label class="form-label fw-semibold">Day &amp; Slot Schedule</label>
+                                    <div class="table-responsive">
+                                        <table class="table table-bordered mb-0 day-slot-table" style="font-size:0.85rem;">
+                                            <thead class="table-light">
+                                                <tr>
+                                                    <th class="text-center" style="width:80px">Day</th>
+                                                    <th class="text-center">Slot</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody>
+                                                <?php
+                                                    $slot_list = [];
+                                                    if ($slot_result) { $slot_result->data_seek(0); while ($s = $slot_result->fetch_assoc()) { $slot_list[] = (string)$s['timeslot']; } }
+                                                    $day_order = [1=>'Mon',2=>'Tue',3=>'Wed',4=>'Thu',5=>'Fri',6=>'Sat',0=>'Sun'];
+                                                ?>
+                                                <?php foreach ($day_order as $num => $name):
+                                                    $checked = in_array((int)$num, (array)$form_values['repeat_days'], true);
+                                                    $saved_slot = (string)($form_values['day_slots'][(string)$num] ?? '');
+                                                ?>
+                                                <tr class="<?= $checked ? 'table-primary' : '' ?> day-slot-row">
+                                                    <td class="text-center align-middle">
+                                                        <div class="form-check d-flex justify-content-center">
+                                                            <input type="checkbox" name="day_enable_<?= $num ?>" value="<?= $num ?>" class="form-check-input day-enable-cb" id="day-enable-<?= $num ?>" data-day="<?= $num ?>" <?= $checked ? 'checked' : '' ?>>
+                                                            <label class="form-check-label ms-1 fw-semibold" for="day-enable-<?= $num ?>"><?= $name ?></label>
+                                                        </div>
+                                                    </td>
+                                                    <td class="align-middle">
+                                                        <select name="day_slot_<?= $num ?>" class="form-control form-control-sm day-slot-select" data-day="<?= $num ?>">
+                                                            <option value="">—</option>
+                                                            <?php foreach ($slot_list as $sn): ?>
+                                                            <option value="<?= htmlspecialchars($sn) ?>" <?= ($sn === $saved_slot) ? 'selected' : '' ?>><?= htmlspecialchars($sn) ?></option>
+                                                            <?php endforeach; ?>
+                                                        </select>
+                                                    </td>
+                                                </tr>
+                                                <?php endforeach; ?>
+                                            </tbody>
+                                        </table>
                                     </div>
-                                    <small class="text-muted">Select all days this tutorial repeats weekly.</small>
+                                    <small class="text-muted">Check a day and select its slot. Unchecked days are ignored.</small>
                                 </div>
 
-                                <button type="submit" name="save_mapping" class="btn btn-primary w-100">
+                                <button type="submit" name="save_mapping" class="btn btn-primary">
                                     <i class="bi <?= $is_edit_mode ? 'bi-check2-circle' : 'bi-plus-circle' ?> me-1"></i><?= $is_edit_mode ? 'Update Tutorial Mapping' : 'Save Tutorial Mapping' ?>
                                 </button>
                             </form>
                         </div>
                     </div>
                 </div>
+            </div>
 
-                <div class="col-12 col-lg-7">
+            <!-- Existing Tutorial Mappings (full width below form) -->
+            <div class="row mt-4">
+                <div class="col-12">
                     <div class="app-card shadow-sm">
                         <div class="app-card-body">
                             <h4 class="mb-3">Existing Tutorial Mappings</h4>
@@ -428,7 +481,6 @@ $day_names = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
                                                                     <th>Sem</th>
                                                                     <th>Subject</th>
                                                                     <th>Tut Batch</th>
-                                                                    <th>Slot</th>
                                                                     <th>Period</th>
                                                                     <th>Days</th>
                                                                     <th></th>
@@ -441,16 +493,26 @@ $day_names = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
                                                                         array_map('intval', explode(',', (string)$m['repeat_days'])),
                                                                         static fn($day) => $day >= 0 && $day <= 6
                                                                     )));
-                                                                    $days_str = implode(', ', array_map(static fn($day) => $day_names[$day] ?? (string)$day, $days_arr));
+                                                                    $stored_slot = (string)$m['slot'];
+                                                                    $has_json = ($stored_slot !== '' && $stored_slot[0] === '{');
+                                                                    $parsed_slots = $has_json ? (json_decode($stored_slot, true) ?: []) : [];
+                                                                    $day_parts = [];
+                                                                    foreach ($days_arr as $d):
+                                                                        $sname = $has_json ? ($parsed_slots[$d] ?? $parsed_slots[(string)$d] ?? '') : $stored_slot;
+                                                                        if ($sname !== ''):
+                                                                            $day_parts[] = ($day_names[$d] ?? (string)$d) . ' (' . htmlspecialchars($sname) . ')';
+                                                                        else:
+                                                                            $day_parts[] = $day_names[$d] ?? (string)$d;
+                                                                        endif;
+                                                                    endforeach;
                                                                 ?>
                                                                 <tr class="<?= ($is_edit_mode && $edit_id === (int)$m['id']) ? 'table-warning' : '' ?>">
                                                                     <td><?= htmlspecialchars($m['faculty_name'] ?? $m['faculty']) ?></td>
                                                                     <td><small class="text-muted">Sem <?= htmlspecialchars($m['sem']) ?></small></td>
                                                                     <td><?= htmlspecialchars($m['subject']) ?></td>
                                                                     <td><span class="badge bg-primary-subtle text-dark border"><?= htmlspecialchars($m['tutBatch']) ?></span></td>
-                                                                    <td><?= htmlspecialchars($m['slot']) ?></td>
                                                                     <td style="white-space:nowrap;"><?= htmlspecialchars($m['start_date']) ?><br><?= htmlspecialchars($m['end_date']) ?></td>
-                                                                    <td><?= htmlspecialchars($days_str) ?></td>
+                                                                    <td><?= implode(', ', $day_parts) ?></td>
                                                                     <td>
                                                                         <div class="d-flex gap-1">
                                                                             <a href="addTutMapping.php?edit_id=<?= (int)$m['id'] ?><?= $is_embedded ? '&embedded=1' : '' ?>" class="btn btn-outline-warning btn-sm" title="Edit tutorial mapping">
@@ -475,7 +537,7 @@ $day_names = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
                                     <?php endforeach; ?>
                                 </div>
                             <?php else: ?>
-                                <div class="alert alert-info mb-0"><i class="bi bi-info-circle me-1"></i>No tutorial mappings yet. Create one on the left.</div>
+                                <div class="alert alert-info mb-0"><i class="bi bi-info-circle me-1"></i>No tutorial mappings yet. Create one using the form above.</div>
                             <?php endif; ?>
                         </div>
                     </div>
@@ -519,16 +581,31 @@ $day_names = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 
     populateSubjects(selectedSem || semSelect.value, selectedSubject);
 
-    document.querySelectorAll('.day-toggle').forEach(function (label) {
-        const cb = label.querySelector('input[type=checkbox]');
-
-        function syncState() {
-            label.classList.toggle('btn-primary', cb.checked);
-            label.classList.toggle('btn-outline-primary', !cb.checked);
+    // Day-slot table: toggle row highlight and auto-clear slot when unchecked
+    document.querySelectorAll('.day-slot-row').forEach(function (row) {
+        const cb = row.querySelector('.day-enable-cb');
+        const sel = row.querySelector('.day-slot-select');
+        function syncRow() {
+            row.classList.toggle('table-primary', cb.checked);
+            if (!cb.checked) {
+                sel.value = '';
+            }
         }
-
-        syncState();
-        cb.addEventListener('change', syncState);
+        cb.addEventListener('change', syncRow);
+        // When slot is changed, auto-check the day if not already checked
+        sel.addEventListener('change', function () {
+            if (this.value !== '' && !cb.checked) {
+                cb.checked = true;
+                syncRow();
+            }
+        });
+        // Initial sync
+        if (cb.checked && sel.value === '') {
+            // If day is checked but no slot, auto-select first slot option if available
+            if (sel.options.length > 1) {
+                sel.selectedIndex = 1;
+            }
+        }
     });
 </script>
 

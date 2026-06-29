@@ -331,7 +331,7 @@ $open_terms = array_values(array_unique($open_terms));
             <?php if ($error_msg !== ''): ?><div class="alert alert-danger"><?= htmlspecialchars($error_msg) ?></div><?php endif; ?>
 
             <div class="row g-4">
-                <div class="col-12 col-lg-5">
+                <div class="col-12">
                     <div class="app-card shadow-sm"><div class="app-card-body">
                         <div class="d-flex justify-content-between align-items-center mb-3">
                             <h4 class="mb-0"><?= $is_edit_mode ? 'Edit Lecture Mapping' : 'New Lecture Mapping' ?></h4>
@@ -386,7 +386,11 @@ $open_terms = array_values(array_unique($open_terms));
                         </form>
                     </div></div>
                 </div>
-                <div class="col-12 col-lg-7">
+            </div>
+
+            <!-- Existing Lecture Mappings (full width below form) -->
+            <div class="row mt-4">
+                <div class="col-12">
                     <div class="app-card shadow-sm"><div class="app-card-body">
                         <h4 class="mb-3">Existing Lecture Mappings</h4>
                         <?php if (!empty($grouped_mappings)): ?>
@@ -430,7 +434,7 @@ $open_terms = array_values(array_unique($open_terms));
                                 </div>
                             <?php endforeach; ?>
                         </div>
-                        <?php else: ?><div class="alert alert-info mb-0">No lecture mappings yet.</div><?php endif; ?>
+                        <?php else: ?><div class="alert alert-info mb-0"><i class="bi bi-info-circle me-1"></i>No lecture mappings yet. Create one using the form above.</div><?php endif; ?>
                     </div></div>
                 </div>
             </div>
