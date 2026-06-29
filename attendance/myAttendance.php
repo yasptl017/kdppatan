@@ -513,46 +513,6 @@ $day_names = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
                 </div>
             </div>
 
-            <!-- Stats Cards -->
-            <div class="row g-3 mb-3">
-                <div class="col-6 col-md-3">
-                    <div class="stat-card stat-card-total">
-                        <div class="stat-card-icon"><i class="bi bi-collection"></i></div>
-                        <div class="stat-card-body">
-                            <div class="stat-card-value"><?= $total ?></div>
-                            <div class="stat-card-label">Total Slots</div>
-                        </div>
-                    </div>
-                </div>
-                <div class="col-6 col-md-3">
-                    <div class="stat-card stat-card-filled">
-                        <div class="stat-card-icon"><i class="bi bi-check-circle-fill"></i></div>
-                        <div class="stat-card-body">
-                            <div class="stat-card-value"><?= $filled ?></div>
-                            <div class="stat-card-label">Filled</div>
-                        </div>
-                    </div>
-                </div>
-                <div class="col-6 col-md-3">
-                    <div class="stat-card stat-card-pending">
-                        <div class="stat-card-icon"><i class="bi bi-hourglass-split"></i></div>
-                        <div class="stat-card-body">
-                            <div class="stat-card-value"><?= $unfilled ?></div>
-                            <div class="stat-card-label">Pending</div>
-                        </div>
-                    </div>
-                </div>
-                <div class="col-6 col-md-3">
-                    <div class="stat-card stat-card-skipped">
-                        <div class="stat-card-icon"><i class="bi bi-slash-circle"></i></div>
-                        <div class="stat-card-body">
-                            <div class="stat-card-value"><?= $skipped ?></div>
-                            <div class="stat-card-label">Skipped</div>
-                        </div>
-                    </div>
-                </div>
-            </div>
-
             <!-- Table Card -->
             <div class="app-card shadow-sm mb-3 attendance-table-card">
                 <div class="attendance-table-toolbar">
@@ -1885,6 +1845,7 @@ document.addEventListener('DOMContentLoaded', function () {
         pageLength: 25,
         order: [[1, 'desc']],
         autoWidth: true,
+        dom: '<"row g-2 mb-2"<"col-sm-6 col-md-6 d-flex align-items-center"l><"col-sm-6 col-md-6 d-flex justify-content-end align-items-center"f>>t<"row mt-2"<"col-sm-12 col-md-6"i><"col-sm-12 col-md-6 d-flex justify-content-end"p>>',
         columnDefs: [
             { targets: 0, orderable: false, searchable: false, className: 'text-center' },
             { targets: 1, className: 'text-start' },
