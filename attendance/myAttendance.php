@@ -468,37 +468,31 @@ $day_names = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
     <div class="app-content pt-3 p-md-3 p-lg-4">
         <div class="container-xl">
 
-            <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-3 attendance-toolbar">
-                <h1 class="app-page-title mb-0"><i class="bi bi-calendar2-check me-2"></i>My Attendance</h1>
-                <a href="addLectureMapping.php" class="btn btn-sm mapping-cta-btn">
-                    Add / Manage Mappings
-                </a>
-            </div>
-
             <?php if ($success_msg !== ''): ?>
-                <div class="alert alert-success"><?= htmlspecialchars($success_msg) ?></div>
+                <div class="alert alert-success mb-3"><i class="bi bi-check-circle me-2"></i><?= htmlspecialchars($success_msg) ?></div>
             <?php endif; ?>
             <?php if ($error_msg !== ''): ?>
-                <div class="alert alert-danger"><?= htmlspecialchars($error_msg) ?></div>
+                <div class="alert alert-danger mb-3"><i class="bi bi-exclamation-triangle me-2"></i><?= htmlspecialchars($error_msg) ?></div>
             <?php endif; ?>
 
             <?php if (empty($mappings_rows)): ?>
-                <div class="alert alert-info">
+                <div class="alert alert-info mb-3">
                     <i class="bi bi-info-circle me-2"></i>No lecture mappings found for your account.
                     <a href="addLectureMapping.php" class="alert-link">Create a mapping</a> to get started.
                 </div>
             <?php else: ?>
 
             <?php if ($filter_term === ''): ?>
-            <div class="app-card shadow-sm">
-                <div class="app-card-body py-4">
+            <div class="app-card shadow-sm mb-3">
+                <div class="app-card-body py-5">
                     <div class="attendance-term-picker text-center">
-                        <h4 class="mb-2">Select Term</h4>
+                        <div class="term-picker-icon mb-3"><i class="bi bi-calendar2-check"></i></div>
+                        <h3 class="mb-2 fw-bold">Select Term</h3>
                         <p class="text-muted mb-4">Choose a term to open its attendance page. Pending will be selected by default.</p>
                         <div class="attendance-term-badges">
                             <?php foreach ($available_terms as $term_option): ?>
                                 <a href="myAttendance.php?<?= htmlspecialchars(http_build_query(['term' => $term_option, 'status' => 'unfilled'])) ?>" class="attendance-term-badge">
-                                    <?= htmlspecialchars($term_option) ?>
+                                    <i class="bi bi-calendar3 me-2"></i><?= htmlspecialchars($term_option) ?>
                                 </a>
                             <?php endforeach; ?>
                         </div>
@@ -507,101 +501,113 @@ $day_names = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
             </div>
             <?php else: ?>
 
-            <div class="app-card shadow-sm mb-1 attendance-shell-card">
-                <div class="app-card-body py-1 px-2 d-flex justify-content-between align-items-center flex-wrap gap-1 attendance-top-strip">
-                    <div class="attendance-current-term">
-                        <span class="attendance-current-term-label">Term</span>
-                        <span class="attendance-current-term-value"><?= htmlspecialchars($filter_term) ?></span>
-                    </div>
-                    <a href="myAttendanceSelect.php" class="btn btn-sm attendance-compact-btn attendance-change-btn">Change Term</a>
-                </div>
-            </div>
-
-            <div class="row g-2 mb-1 attendance-stats-row">
-                <div class="col-6 col-md-3 col-xl-2">
-                    <div class="app-card shadow-sm text-center attendance-stat-card attendance-stat-card-compact attendance-shell-card">
-                        <div class="app-card-body py-2">
-                            <div class="attendance-stat-value"><?= $total ?></div>
-                            <div class="attendance-stat-label">Total</div>
-                        </div>
-                    </div>
-                </div>
-                <div class="col-6 col-md-3 col-xl-2">
-                    <div class="app-card shadow-sm text-center attendance-stat-card attendance-stat-card-compact attendance-shell-card">
-                        <div class="app-card-body py-2">
-                            <div class="attendance-stat-value text-success"><?= $filled ?></div>
-                            <div class="attendance-stat-label">Filled</div>
-                        </div>
-                    </div>
-                </div>
-                <div class="col-6 col-md-3 col-xl-2">
-                    <div class="app-card shadow-sm text-center attendance-stat-card attendance-stat-card-compact attendance-shell-card">
-                        <div class="app-card-body py-2">
-                            <div class="attendance-stat-value text-danger"><?= $unfilled ?></div>
-                            <div class="attendance-stat-label">Pending</div>
-                        </div>
-                    </div>
-                </div>
-                <div class="col-6 col-md-3 col-xl-2">
-                    <div class="app-card shadow-sm text-center attendance-stat-card attendance-stat-card-compact attendance-shell-card">
-                        <div class="app-card-body py-2">
-                            <div class="attendance-stat-value text-secondary"><?= $skipped ?></div>
-                            <div class="attendance-stat-label">Skipped</div>
+            <!-- Page Header -->
+            <div class="page-header-card mb-3">
+                <div class="page-header-content">
+                    <div class="page-header-text">
+                        <h1 class="page-header-title"><i class="bi bi-calendar2-check"></i>My Attendance</h1>
+                        <div class="page-header-meta">
+                            <span class="page-header-meta-item"><i class="bi bi-mortarboard"></i>Term <?= htmlspecialchars($filter_term) ?></span>
                         </div>
                     </div>
                 </div>
             </div>
 
-            <div class="app-card shadow-sm mb-1 attendance-shell-card">
-                <div class="app-card-body py-1 px-2">
-                    <div class="attendance-filter-panel">
-                        <div class="attendance-filter-row">
-                            <span class="attendance-filter-label">Filter</span>
-                            <div class="attendance-filter-pills" role="group" aria-label="Attendance filters">
-                                <a href="?<?= htmlspecialchars(http_build_query(['term' => $filter_term, 'status' => 'all', 'mapping' => $filter_mapping])) ?>"
-                                   class="btn btn-sm <?= $filter_status === 'all' ? 'btn-secondary' : 'btn-outline-secondary' ?>">All</a>
-                                <a href="?<?= htmlspecialchars(http_build_query(['term' => $filter_term, 'status' => 'unfilled', 'mapping' => $filter_mapping])) ?>"
-                                   class="btn btn-sm <?= $filter_status === 'unfilled' ? 'btn-danger' : 'btn-outline-danger' ?>">Pending</a>
-                                <a href="?<?= htmlspecialchars(http_build_query(['term' => $filter_term, 'status' => 'filled', 'mapping' => $filter_mapping])) ?>"
-                                   class="btn btn-sm <?= $filter_status === 'filled' ? 'btn-success' : 'btn-outline-success' ?>">Filled</a>
-                                <a href="?<?= htmlspecialchars(http_build_query(['term' => $filter_term, 'status' => 'skipped', 'mapping' => $filter_mapping])) ?>"
-                                   class="btn btn-sm <?= $filter_status === 'skipped' ? 'btn-secondary' : 'btn-outline-secondary' ?>">Skipped</a>
-                            </div>
+            <!-- Stats Cards -->
+            <div class="row g-3 mb-3">
+                <div class="col-6 col-md-3">
+                    <div class="stat-card stat-card-total">
+                        <div class="stat-card-icon"><i class="bi bi-collection"></i></div>
+                        <div class="stat-card-body">
+                            <div class="stat-card-value"><?= $total ?></div>
+                            <div class="stat-card-label">Total Slots</div>
                         </div>
-
-                        <?php if (!empty($bulk_candidates)): ?>
-                            <div class="attendance-filter-actions">
-                                <form method="POST" action="myAttendance.php?<?= htmlspecialchars(http_build_query(['term' => $filter_term, 'status' => $filter_status, 'mapping' => $filter_mapping])) ?>" class="attendance-bulk-form">
-                                    <button type="submit" name="autofill_pending_max" class="btn btn-warning btn-sm attendance-bulk-btn" title="Autofill all pending slots (max by day)" onclick="return confirm('Autofill all pending slots using maximum available attendance on each day? Slots without autofill source will be skipped.');">
-                                        <i class="bi bi-stars me-1"></i>Autofill Pending
-                                    </button>
-                                </form>
-                            </div>
-                        <?php endif; ?>
+                    </div>
+                </div>
+                <div class="col-6 col-md-3">
+                    <div class="stat-card stat-card-filled">
+                        <div class="stat-card-icon"><i class="bi bi-check-circle-fill"></i></div>
+                        <div class="stat-card-body">
+                            <div class="stat-card-value"><?= $filled ?></div>
+                            <div class="stat-card-label">Filled</div>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-6 col-md-3">
+                    <div class="stat-card stat-card-pending">
+                        <div class="stat-card-icon"><i class="bi bi-hourglass-split"></i></div>
+                        <div class="stat-card-body">
+                            <div class="stat-card-value"><?= $unfilled ?></div>
+                            <div class="stat-card-label">Pending</div>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-6 col-md-3">
+                    <div class="stat-card stat-card-skipped">
+                        <div class="stat-card-icon"><i class="bi bi-slash-circle"></i></div>
+                        <div class="stat-card-body">
+                            <div class="stat-card-value"><?= $skipped ?></div>
+                            <div class="stat-card-label">Skipped</div>
+                        </div>
                     </div>
                 </div>
             </div>
 
-            <div class="app-card shadow-sm attendance-shell-card">
+            <!-- Table Card -->
+            <div class="app-card shadow-sm mb-3 attendance-table-card">
+                <div class="attendance-table-toolbar">
+                    <div class="attendance-table-toolbar-left">
+                        <div class="attendance-filter-pills" role="group" aria-label="Attendance filters">
+                            <a href="?<?= htmlspecialchars(http_build_query(['term' => $filter_term, 'status' => 'all', 'mapping' => $filter_mapping])) ?>"
+                               class="filter-pill <?= $filter_status === 'all' ? 'filter-pill-active' : '' ?>" title="All slots">
+                                All <span class="filter-pill-count"><?= $total ?></span>
+                            </a>
+                            <a href="?<?= htmlspecialchars(http_build_query(['term' => $filter_term, 'status' => 'unfilled', 'mapping' => $filter_mapping])) ?>"
+                               class="filter-pill filter-pill-danger <?= $filter_status === 'unfilled' ? 'filter-pill-active' : '' ?>" title="Pending slots">
+                                Pending <span class="filter-pill-count"><?= $unfilled ?></span>
+                            </a>
+                            <a href="?<?= htmlspecialchars(http_build_query(['term' => $filter_term, 'status' => 'filled', 'mapping' => $filter_mapping])) ?>"
+                               class="filter-pill filter-pill-success <?= $filter_status === 'filled' ? 'filter-pill-active' : '' ?>" title="Filled slots">
+                                Filled <span class="filter-pill-count"><?= $filled ?></span>
+                            </a>
+                            <a href="?<?= htmlspecialchars(http_build_query(['term' => $filter_term, 'status' => 'skipped', 'mapping' => $filter_mapping])) ?>"
+                               class="filter-pill filter-pill-muted <?= $filter_status === 'skipped' ? 'filter-pill-active' : '' ?>" title="Skipped slots">
+                                Skipped <span class="filter-pill-count"><?= $skipped ?></span>
+                            </a>
+                        </div>
+                    </div>
+                    <?php if (!empty($bulk_candidates)): ?>
+                    <div class="attendance-table-toolbar-right">
+                        <form method="POST" action="myAttendance.php?<?= htmlspecialchars(http_build_query(['term' => $filter_term, 'status' => $filter_status, 'mapping' => $filter_mapping])) ?>" class="attendance-bulk-form m-0">
+                            <button type="submit" name="autofill_pending_max" class="btn bulk-autofill-btn" title="Autofill all pending slots" onclick="return confirm('Autofill all pending slots using maximum available attendance on each day? Slots without autofill source will be skipped.');">
+                                <i class="bi bi-stars"></i><span>Autofill <?= count($bulk_candidates) ?> Pending</span>
+                            </button>
+                        </form>
+                    </div>
+                    <?php endif; ?>
+                </div>
+
                 <div class="app-card-body p-0">
                     <?php if (empty($slot_list)): ?>
-                        <div class="p-4 text-center text-muted">
-                            <i class="bi bi-calendar-x display-6 d-block mb-2"></i>
-                            No slots match the current filter for term <?= htmlspecialchars($filter_term) ?>.
+                        <div class="attendance-empty-state">
+                            <div class="attendance-empty-icon"><i class="bi bi-calendar-x"></i></div>
+                            <h5>No slots found</h5>
+                            <p>No slots match the current filter for term <strong><?= htmlspecialchars($filter_term) ?></strong>.</p>
                         </div>
                     <?php else: ?>
                         <div class="table-responsive attendance-table-wrap">
-                            <table id="attendanceDataTable" class="table table-hover align-middle mb-0 attendance-table" style="font-size:0.875rem;">
-                                <thead class="table-light sticky-top">
+                            <table id="attendanceDataTable" class="table attendance-data-table mb-0">
+                                <thead>
                                     <tr>
-                                        <th style="width:36px;">#</th>
-                                        <th>Date</th>
-                                        <th>Day</th>
-                                        <th>Subject</th>
-                                        <th>Class</th>
-                                        <th>Slot</th>
-                                        <th>Status</th>
-                                        <th>Action</th>
+                                        <th class="text-center col-num">#</th>
+                                        <th class="text-center col-type">Type</th>
+                                        <th class="col-date">Date</th>
+                                        <th class="text-center col-day">Day</th>
+                                        <th class="col-subject">Subject</th>
+                                        <th class="text-center col-class">Class</th>
+                                        <th class="text-center col-slot">Slot</th>
+                                        <th class="text-center col-status">Status</th>
+                                        <th class="text-center col-action">Action</th>
                                     </tr>
                                 </thead>
                                 <tbody>
@@ -622,56 +628,70 @@ $day_names = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
                                     $edit_url = $slot['filled'] ? 'editlecatt.php?id=' . $slot['attendance_id'] : null;
                                     $summary_url = $slot['filled'] ? 'attendanceSummary.php?type=lecture&id=' . $slot['attendance_id'] : null;
                                     $row_class = '';
-                                    if ($slot['skipped']) $row_class = 'table-secondary skip-row';
-                                    elseif (!$slot['filled'] && $is_today) $row_class = 'table-warning';
-                                    elseif (!$slot['filled']) $row_class = 'table-danger-subtle';
+                                    if ($slot['skipped']) $row_class = 'row-skipped';
+                                    elseif (!$slot['filled'] && $is_today) $row_class = 'row-today';
+                                    elseif (!$slot['filled']) $row_class = 'row-pending';
                                 ?>
                                 <tr class="<?= $row_class ?>">
-                                    <td class="text-muted" data-label="No."><?= $i + 1 ?></td>
-                                    <td data-label="Date">
-                                        <strong><?= htmlspecialchars($slot['date']) ?></strong>
-                                        <?php if ($is_today): ?>
-                                            <span class="badge bg-warning text-dark ms-1">Today</span>
-                                        <?php endif; ?>
+                                    <td class="text-center col-num"><span class="row-num"><?= $i + 1 ?></span></td>
+                                    <td class="text-center col-type">
+                                        <span class="type-pill type-lec" title="Lecture"><i class="bi bi-easel2"></i>Lec</span>
                                     </td>
-                                    <td data-label="Day"><?= $dow_name ?></td>
-                                    <td data-label="Subject"><?= htmlspecialchars($slot['subject']) ?></td>
-                                    <td data-label="Class"><span class="badge bg-primary-subtle text-dark border"><?= htmlspecialchars($slot['class']) ?></span></td>
-                                    <td data-label="Slot"><?= htmlspecialchars($slot['slot']) ?></td>
-                                    <td data-label="Status" class="attendance-status-cell">
+                                    <td class="col-date">
+                                        <div class="date-cell">
+                                            <span class="date-cell-day"><?= date('d', strtotime($slot['date'])) ?></span>
+                                            <div class="date-cell-month">
+                                                <?= date('M', strtotime($slot['date'])) ?>
+                                                <small><?= date('Y', strtotime($slot['date'])) ?></small>
+                                            </div>
+                                            <?php if ($is_today): ?>
+                                                <span class="today-tag">Today</span>
+                                            <?php endif; ?>
+                                        </div>
+                                    </td>
+                                    <td class="text-center col-day"><span class="day-pill"><?= $dow_name ?></span></td>
+                                    <td class="col-subject">
+                                        <div class="subject-cell">
+                                            <span class="subject-name"><?= htmlspecialchars($slot['subject']) ?></span>
+                                            <span class="subject-sem">Sem <?= htmlspecialchars($slot['sem']) ?></span>
+                                        </div>
+                                    </td>
+                                    <td class="text-center col-class"><span class="class-badge"><?= htmlspecialchars($slot['class']) ?></span></td>
+                                    <td class="text-center col-slot"><span class="slot-text"><?= htmlspecialchars($slot['slot']) ?></span></td>
+                                    <td class="text-center col-status">
                                         <?php if ($slot['skipped']): ?>
-                                            <span class="badge bg-secondary"><i class="bi bi-slash-circle me-1"></i>Skipped</span>
+                                            <span class="status-pill status-skipped"><i class="bi bi-slash-circle"></i>Skipped</span>
                                         <?php elseif ($slot['filled']): ?>
-                                            <span class="badge bg-success">Filled</span>
+                                            <span class="status-pill status-filled"><i class="bi bi-check-circle-fill"></i>Filled</span>
                                         <?php else: ?>
-                                            <span class="badge bg-danger">Pending</span>
+                                            <span class="status-pill status-pending"><i class="bi bi-hourglass-split"></i>Pending</span>
                                         <?php endif; ?>
                                     </td>
-                                    <td class="text-nowrap attendance-action-cell" data-label="Action">
-                                        <div class="attendance-actions">
+                                    <td class="text-center col-action">
+                                        <div class="action-buttons">
                                         <?php if ($slot['skipped']): ?>
-                                            <form method="POST" action="myAttendance.php?<?= htmlspecialchars(http_build_query(['term' => $filter_term, 'status' => $filter_status, 'mapping' => $filter_mapping])) ?>" class="d-inline-flex">
+                                            <form method="POST" action="myAttendance.php?<?= htmlspecialchars(http_build_query(['term' => $filter_term, 'status' => $filter_status, 'mapping' => $filter_mapping])) ?>" class="d-inline-flex m-0">
                                                 <input type="hidden" name="restore_mapping_id" value="<?= (int)$slot['mapping_id'] ?>">
                                                 <input type="hidden" name="restore_date" value="<?= htmlspecialchars($slot['date']) ?>">
-                                                <button type="submit" name="restore_slot" class="btn btn-outline-secondary btn-sm" title="Restore this slot" onclick="return confirm('Restore this slot on <?= htmlspecialchars($slot['date']) ?>?')">
-                                                    <i class="bi bi-arrow-counterclockwise"></i> Restore
+                                                <button type="submit" name="restore_slot" class="action-btn action-btn-secondary" title="Restore slot" onclick="return confirm('Restore this slot on <?= htmlspecialchars($slot['date']) ?>?')">
+                                                    <i class="bi bi-arrow-counterclockwise"></i>
                                                 </button>
                                             </form>
                                         <?php elseif ($slot['filled']): ?>
-                                            <a href="<?= htmlspecialchars($summary_url) ?>" class="btn btn-outline-success btn-sm me-1" title="View Summary">
+                                            <a href="<?= htmlspecialchars($summary_url) ?>" class="action-btn action-btn-success" title="View Summary">
                                                 <i class="bi bi-eye"></i>
                                             </a>
-                                            <a href="<?= htmlspecialchars($edit_url) ?>" class="btn btn-outline-primary btn-sm" title="Edit Attendance">
+                                            <a href="<?= htmlspecialchars($edit_url) ?>" class="action-btn action-btn-primary" title="Edit Attendance">
                                                 <i class="bi bi-pencil"></i>
                                             </a>
                                         <?php else: ?>
-                                            <a href="<?= htmlspecialchars($take_url) ?>" class="btn btn-warning btn-sm me-1">
-                                                Take Attendance
+                                            <a href="<?= htmlspecialchars($take_url) ?>" class="action-btn action-btn-warning" title="Take Attendance">
+                                                <i class="bi bi-pencil-square"></i>
                                             </a>
-                                            <form method="POST" action="myAttendance.php?<?= htmlspecialchars(http_build_query(['term' => $filter_term, 'status' => $filter_status, 'mapping' => $filter_mapping])) ?>" class="d-inline-flex">
+                                            <form method="POST" action="myAttendance.php?<?= htmlspecialchars(http_build_query(['term' => $filter_term, 'status' => $filter_status, 'mapping' => $filter_mapping])) ?>" class="d-inline-flex m-0">
                                                 <input type="hidden" name="skip_mapping_id" value="<?= (int)$slot['mapping_id'] ?>">
                                                 <input type="hidden" name="skip_date" value="<?= htmlspecialchars($slot['date']) ?>">
-                                                <button type="submit" name="skip_slot" class="btn btn-outline-secondary btn-sm" title="Skip this slot (holiday/no class)" onclick="return confirm('Skip slot on <?= htmlspecialchars($slot['date']) ?>? It will be removed from pending.')">
+                                                <button type="submit" name="skip_slot" class="action-btn action-btn-secondary" title="Skip slot (holiday/no class)" onclick="return confirm('Skip slot on <?= htmlspecialchars($slot['date']) ?>? It will be removed from pending.')">
                                                     <i class="bi bi-slash-circle"></i>
                                                 </button>
                                             </form>
@@ -694,429 +714,1161 @@ $day_names = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 </div>
 
 <style>
-.table-danger-subtle {
-    background-color: rgba(220, 53, 69, 0.05);
+/* ============================================================
+   My Attendance - Professional Design
+   ============================================================ */
+
+/* ---------- Page Header (Hero) ---------- */
+.page-header-card {
+    background: linear-gradient(135deg, #ffffff 0%, #f8fafc 100%);
+    border-radius: 1rem;
+    padding: 1.5rem 1.75rem;
+    box-shadow: 0 1px 3px rgba(15, 23, 42, 0.06), 0 1px 2px rgba(15, 23, 42, 0.04);
+    border: 1px solid #e2e8f0;
+    position: relative;
+    overflow: hidden;
 }
-.skip-row td {
-    opacity: 0.55;
-    text-decoration: line-through;
-    text-decoration-color: #888;
-}
-.skip-row td:last-child {
-    text-decoration: none;
-    opacity: 1;
-}
-.sticky-top {
+
+.page-header-card::before {
+    content: '';
+    position: absolute;
+    left: 0;
     top: 0;
-    z-index: 1;
+    bottom: 0;
+    width: 5px;
+    background: linear-gradient(180deg, #667eea 0%, #764ba2 100%);
 }
-.mapping-cta-btn {
+
+.page-header-content {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 1.5rem;
+    flex-wrap: wrap;
+}
+
+.page-header-text {
+    flex: 1 1 auto;
+    min-width: 0;
+}
+
+.page-header-title {
+    font-size: 1.75rem !important;
+    font-weight: 800 !important;
+    color: #0f172a !important;
+    margin: 0 0 0.5rem 0 !important;
+    padding: 0 !important;
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    letter-spacing: -0.025em;
+}
+
+.page-header-title i {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 42px;
+    height: 42px;
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
     color: #fff;
-    border: 0;
     border-radius: 0.6rem;
-    background: linear-gradient(135deg, #1f7a8c, #2a9d8f);
-    box-shadow: 0 12px 28px rgba(31, 122, 140, 0.28);
-    font-weight: 700;
-    letter-spacing: 0.5px;
-    padding: 0.65rem 1.2rem;
-    transition: transform 0.18s ease, box-shadow 0.18s ease, filter 0.18s ease;
+    font-size: 1.2rem;
+    box-shadow: 0 4px 12px rgba(102, 126, 234, 0.3);
+    flex-shrink: 0;
+}
+
+.page-header-title::after {
+    display: none;
+}
+
+.page-header-meta {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    flex-wrap: wrap;
+    font-size: 0.875rem;
+    color: #64748b;
+    padding-left: 56px;
+}
+
+.page-header-meta-item {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+    padding: 0.3rem 0.75rem;
+    background: #eef2ff;
+    color: #4338ca;
+    border-radius: 999px;
+    font-weight: 600;
+    font-size: 0.825rem;
+}
+
+.page-header-meta-item i {
+    font-size: 0.85rem;
+}
+
+.page-header-meta-divider {
+    width: 4px;
+    height: 4px;
+    background: #cbd5e1;
+    border-radius: 50%;
+}
+
+.page-header-change-term {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    color: #64748b !important;
+    text-decoration: none !important;
+    font-size: 0.825rem;
+    font-weight: 600;
+    padding: 0.3rem 0.65rem;
+    border-radius: 0.4rem;
+    transition: all 0.2s ease;
+}
+
+.page-header-change-term:hover {
+    background: #f1f5f9;
+    color: #475569 !important;
+}
+
+.page-header-actions {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+}
+
+.page-header-btn {
+    background: linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%) !important;
+    border: 0 !important;
+    color: #fff !important;
+    font-weight: 600 !important;
+    padding: 0.65rem 1.25rem !important;
+    border-radius: 0.55rem !important;
+    box-shadow: 0 4px 12px rgba(37, 99, 235, 0.28) !important;
+    transition: all 0.2s ease !important;
+    display: inline-flex !important;
+    align-items: center;
+    gap: 0.5rem;
+    font-size: 0.875rem !important;
+}
+
+.page-header-btn:hover,
+.page-header-btn:focus {
+    transform: translateY(-2px);
+    box-shadow: 0 8px 18px rgba(37, 99, 235, 0.4) !important;
+    color: #fff !important;
+    filter: brightness(1.05);
+}
+
+.page-header-btn i {
     font-size: 1rem;
 }
-.mapping-cta-btn:hover,
-.mapping-cta-btn:focus {
-    color: #fff;
-    transform: translateY(-1px);
-    box-shadow: 0 14px 28px rgba(31, 122, 140, 0.28);
-    filter: saturate(1.05);
+
+/* ---------- Stat Cards ---------- */
+.stat-card {
+    background: #fff;
+    border-radius: 0.85rem;
+    padding: 1.25rem 1.25rem;
+    box-shadow: 0 1px 3px rgba(15, 23, 42, 0.04), 0 1px 2px rgba(15, 23, 42, 0.06);
+    border: 1px solid #e2e8f0;
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    transition: all 0.2s ease;
+    position: relative;
+    overflow: hidden;
+    height: 100%;
 }
-.mapping-cta-btn:active {
-    transform: translateY(0);
+
+.stat-card::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 3px;
+    transition: height 0.3s ease;
 }
+
+.stat-card:hover {
+    transform: translateY(-3px);
+    box-shadow: 0 12px 24px rgba(15, 23, 42, 0.08), 0 4px 8px rgba(15, 23, 42, 0.04);
+}
+
+.stat-card:hover::before {
+    height: 4px;
+}
+
+.stat-card-total::before { background: linear-gradient(90deg, #64748b, #475569); }
+.stat-card-filled::before { background: linear-gradient(90deg, #10b981, #059669); }
+.stat-card-pending::before { background: linear-gradient(90deg, #ef4444, #dc2626); }
+.stat-card-skipped::before { background: linear-gradient(90deg, #94a3b8, #64748b); }
+
+.stat-card-icon {
+    width: 52px;
+    height: 52px;
+    border-radius: 0.7rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    font-size: 1.5rem;
+}
+
+.stat-card-total .stat-card-icon { background: linear-gradient(135deg, #f1f5f9, #e2e8f0); color: #475569; }
+.stat-card-filled .stat-card-icon { background: linear-gradient(135deg, #d1fae5, #a7f3d0); color: #047857; }
+.stat-card-pending .stat-card-icon { background: linear-gradient(135deg, #fee2e2, #fecaca); color: #b91c1c; }
+.stat-card-skipped .stat-card-icon { background: linear-gradient(135deg, #e2e8f0, #cbd5e1); color: #475569; }
+
+.stat-card-body {
+    flex: 1 1 auto;
+    min-width: 0;
+}
+
+.stat-card-value {
+    font-size: 2rem;
+    font-weight: 800;
+    color: #0f172a;
+    line-height: 1;
+    letter-spacing: -0.025em;
+}
+
+.stat-card-label {
+    margin-top: 0.35rem;
+    font-size: 0.78rem;
+    color: #64748b;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+}
+
+/* ---------- Term Picker (initial screen) ---------- */
 .attendance-term-picker {
     max-width: 720px;
     margin: 0 auto;
+    padding: 1rem 0;
 }
+
+.term-picker-icon {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 72px;
+    height: 72px;
+    background: linear-gradient(135deg, #eef4ff, #dbeafe);
+    color: #4338ca;
+    border-radius: 1.25rem;
+    font-size: 2rem;
+    margin: 0 auto;
+    box-shadow: 0 8px 20px rgba(67, 56, 202, 0.12);
+}
+
+.attendance-term-picker h3 {
+    font-size: 1.6rem !important;
+    color: #0f172a !important;
+    margin-bottom: 0.5rem !important;
+    padding-bottom: 0 !important;
+    border-bottom: 0 !important;
+    font-weight: 700 !important;
+    letter-spacing: -0.02em;
+}
+
+.attendance-term-picker p {
+    font-size: 0.95rem !important;
+    color: #64748b !important;
+}
+
 .attendance-term-badges {
     display: flex;
     justify-content: center;
     gap: 1rem;
     flex-wrap: wrap;
+    margin-top: 1.5rem;
 }
+
 .attendance-term-badge {
-    display: inline-flex;
+    display: inline-flex !important;
     align-items: center;
     justify-content: center;
-    min-width: 130px;
-    padding: 0.85rem 1.25rem;
-    border-radius: 999px;
-    background: linear-gradient(135deg, #eef6ff, #dbeafe);
-    border: 2px solid #93c5fd;
-    color: #0f172a;
-    font-weight: 700;
-    text-decoration: none;
-    font-size: 1rem;
-    transition: transform 0.18s ease, box-shadow 0.18s ease, background 0.18s ease;
+    min-width: 150px;
+    padding: 0.9rem 1.5rem !important;
+    border-radius: 0.75rem !important;
+    background: linear-gradient(135deg, #eef4ff, #dbeafe) !important;
+    border: 1.5px solid #93c5fd !important;
+    color: #1e3a8a !important;
+    font-weight: 700 !important;
+    text-decoration: none !important;
+    font-size: 1rem !important;
+    transition: all 0.2s ease !important;
+    box-shadow: 0 2px 6px rgba(37, 99, 235, 0.08);
 }
+
 .attendance-term-badge:hover,
 .attendance-term-badge:focus {
-    color: #0f172a;
-    transform: translateY(-2px);
-    box-shadow: 0 12px 28px rgba(37, 99, 235, 0.22);
-    background: linear-gradient(135deg, #bfdbfe, #7dd3fc);
+    color: #1e3a8a !important;
+    transform: translateY(-3px);
+    box-shadow: 0 10px 20px rgba(37, 99, 235, 0.2);
+    background: linear-gradient(135deg, #dbeafe, #bfdbfe) !important;
 }
-.attendance-filters {
-    display: block;
+
+/* ---------- Table Card ---------- */
+.attendance-table-card {
+    border-radius: 0.85rem !important;
+    overflow: hidden;
+    border: 1px solid #e2e8f0 !important;
 }
-.attendance-top-strip {
-    min-height: 0;
-    gap: 0.35rem;
-    flex-wrap: nowrap;
-}
-.attendance-shell-card {
-    border-radius: 0.7rem;
-}
-.attendance-shell-card .app-card-body {
-    padding: 0.3rem 0.45rem !important;
-}
-.attendance-current-term {
-    display: inline-flex;
-    align-items: center;
-    gap: 0.32rem;
-    flex-wrap: wrap;
-}
-.attendance-current-term-label {
-    font-size: 0.62rem;
-    color: #64748b;
-    font-weight: 600;
-    text-transform: uppercase;
-    letter-spacing: 0.04em;
-}
-.attendance-current-term-value {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    min-width: 46px;
-    padding: 0.1rem 0.45rem;
-    border-radius: 999px;
-    background: #eef6ff;
-    border: 1px solid #bfdbfe;
-    color: #0f172a;
-    font-size: 0.82rem;
-    font-weight: 700;
-    line-height: 1.1;
-}
-.attendance-filter-panel {
+
+/* Toolbar above table */
+.attendance-table-toolbar {
+    padding: 1rem 1.25rem;
+    background: linear-gradient(180deg, #f8fafc 0%, #ffffff 100%);
+    border-bottom: 1px solid #e2e8f0;
     display: flex;
-    flex-direction: column;
-    gap: 0.75rem;
-    padding: 0.75rem 1rem;
-    border-radius: 0.75rem;
-    background: linear-gradient(135deg, #f0f4f8 0%, #f8fafc 100%);
-    border: 2px solid #e2e8f0;
-}
-.attendance-filter-row {
-    display: flex;
+    justify-content: space-between;
     align-items: center;
     gap: 1rem;
     flex-wrap: wrap;
 }
-.attendance-filter-label {
-    font-size: 0.9rem;
-    color: #1e293b;
-    white-space: nowrap;
-    font-weight: 700;
-    text-transform: uppercase;
-    letter-spacing: 0.08em;
+
+.attendance-table-toolbar-left {
+    display: flex;
+    align-items: center;
+    gap: 1.25rem;
+    flex-wrap: wrap;
+    flex: 1 1 auto;
+    min-width: 0;
 }
-.attendance-filter-pills {
+
+.attendance-table-title {
+    font-size: 1.05rem !important;
+    font-weight: 700 !important;
+    color: #0f172a !important;
+    margin: 0 !important;
+    padding: 0 !important;
     display: flex;
     align-items: center;
     gap: 0.5rem;
+}
+
+.attendance-table-title i {
+    color: #667eea;
+    font-size: 1.15rem;
+}
+
+/* Filter pills (clean, with counts) */
+.attendance-filter-pills {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
     flex-wrap: wrap;
-    overflow-x: auto;
-    scrollbar-width: thin;
-    padding-bottom: 0.15rem;
-    flex: 1 1 auto;
 }
-.attendance-filter-pills .btn {
-    padding: 0.5rem 0.85rem;
-    font-size: 0.92rem;
+
+.filter-pill {
+    display: inline-flex !important;
+    align-items: center;
+    gap: 0.45rem;
+    padding: 0.45rem 0.85rem !important;
+    background: #fff;
+    border: 1.5px solid #e2e8f0;
+    color: #475569 !important;
+    border-radius: 999px !important;
+    font-size: 0.8rem !important;
+    font-weight: 600 !important;
+    text-decoration: none !important;
+    transition: all 0.2s ease !important;
     line-height: 1.2;
-    border-radius: 999px;
-    font-weight: 700;
     white-space: nowrap;
-    border: 2px solid;
-    transition: all 0.2s ease;
 }
-.attendance-bulk-form {
-    margin: 0;
-}
-.attendance-filter-actions {
-    display: flex;
-    justify-content: flex-start;
-}
-.attendance-compact-btn {
-    padding: 0.5rem 0.85rem;
-    font-size: 0.85rem;
-    line-height: 1.2;
-    border-radius: 0.6rem;
-    font-weight: 700;
-    border-width: 2px;
-}
-.attendance-change-btn {
-    color: #fff;
-    background: linear-gradient(135deg, #2563eb, #1d4ed8);
-    border: 0;
-    font-weight: 700;
-    border-radius: 0.6rem;
-    box-shadow: 0 6px 14px rgba(37, 99, 235, 0.22);
-    transition: transform 0.16s ease, box-shadow 0.16s ease, filter 0.16s ease;
-}
-.attendance-change-btn:hover,
-.attendance-change-btn:focus {
-    color: #fff;
+
+.filter-pill:hover {
+    background: #f1f5f9;
+    border-color: #cbd5e1;
+    color: #1e293b !important;
     transform: translateY(-1px);
-    box-shadow: 0 14px 28px rgba(37, 99, 235, 0.24);
-    filter: brightness(1.03);
 }
-.attendance-change-btn:active {
-    transform: translateY(0);
-}
-.attendance-bulk-btn {
-    min-height: 38px;
-    padding: 0.6rem 1rem;
-    font-size: 0.95rem;
+
+.filter-pill-count {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 22px;
+    height: 20px;
+    padding: 0 0.4rem;
+    background: #f1f5f9;
+    color: #64748b;
+    border-radius: 999px;
+    font-size: 0.7rem;
     font-weight: 700;
-    white-space: nowrap;
-    border-radius: 0.6rem;
-    box-shadow: 0 6px 14px rgba(245, 158, 11, 0.24);
-    border-width: 2px;
-    transition: all 0.2s ease;
-}
-.attendance-stat-card {
-    border-radius: 1rem;
-    border: 2px solid #e2e8f0;
-    transition: all 0.2s ease;
-}
-.attendance-stat-card:hover {
-    box-shadow: 0 8px 16px rgba(0, 0, 0, 0.08);
-    transform: translateY(-2px);
-}
-.attendance-stat-card .app-card-body {
-    padding: 0.6rem 0.3rem !important;
-}
-.attendance-stat-card-compact {
-    border-radius: 0.85rem;
-}
-.attendance-stat-card-compact .app-card-body {
-    padding: 0.5rem 0.25rem !important;
-}
-.attendance-stat-value {
-    font-size: 1.8rem;
-    font-weight: 800;
     line-height: 1;
 }
-.attendance-stat-label {
-    margin-top: 0.35rem;
-    font-size: 0.75rem;
-    color: #64748b;
-    line-height: 1.2;
-    font-weight: 700;
-    text-transform: uppercase;
-    letter-spacing: 0.05em;
+
+.filter-pill-active {
+    background: linear-gradient(135deg, #5c6bc0 0%, #3949ab 100%) !important;
+    border-color: transparent !important;
+    color: #fff !important;
+    box-shadow: 0 4px 10px rgba(92, 107, 192, 0.3);
 }
+
+.filter-pill-active:hover {
+    background: linear-gradient(135deg, #4a5ab8 0%, #2c3a99 100%) !important;
+    color: #fff !important;
+}
+
+.filter-pill-active .filter-pill-count {
+    background: rgba(255, 255, 255, 0.25);
+    color: #fff;
+}
+
+.filter-pill-danger.filter-pill-active {
+    background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%) !important;
+    box-shadow: 0 4px 10px rgba(239, 68, 68, 0.3);
+}
+
+.filter-pill-success.filter-pill-active {
+    background: linear-gradient(135deg, #10b981 0%, #059669 100%) !important;
+    box-shadow: 0 4px 10px rgba(16, 185, 129, 0.3);
+}
+
+.filter-pill-muted.filter-pill-active {
+    background: linear-gradient(135deg, #64748b 0%, #475569 100%) !important;
+    box-shadow: 0 4px 10px rgba(100, 116, 139, 0.3);
+}
+
+/* Bulk autofill button */
+.attendance-table-toolbar-right {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+}
+
+.bulk-autofill-btn {
+    background: linear-gradient(135deg, #fb8c00 0%, #ef6c00 100%) !important;
+    border: 0 !important;
+    color: #fff !important;
+    font-weight: 600 !important;
+    padding: 0.55rem 1.1rem !important;
+    border-radius: 0.55rem !important;
+    box-shadow: 0 4px 10px rgba(245, 158, 11, 0.3) !important;
+    transition: all 0.2s ease !important;
+    display: inline-flex !important;
+    align-items: center;
+    gap: 0.45rem;
+    font-size: 0.85rem !important;
+    white-space: nowrap;
+}
+
+.bulk-autofill-btn:hover,
+.bulk-autofill-btn:focus {
+    color: #fff !important;
+    transform: translateY(-2px);
+    box-shadow: 0 8px 16px rgba(245, 158, 11, 0.4) !important;
+    filter: brightness(1.05);
+}
+
+.bulk-autofill-btn i {
+    font-size: 0.95rem;
+}
+
+/* ---------- Data Table ---------- */
 .attendance-table-wrap {
     overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
 }
-.attendance-table-wrap .dataTables_wrapper {
-    padding: 0.35rem 0.45rem 0.45rem;
+
+.attendance-data-table {
+    width: 100%;
+    margin-bottom: 0;
+    border-collapse: separate;
+    border-spacing: 0;
 }
-.attendance-table-wrap .dataTables_filter {
-    margin-bottom: 0.35rem;
-}
-.attendance-table-wrap .dataTables_filter input {
-    margin-left: 0.4rem;
-    border: 1px solid #ced4da;
-    border-radius: 0.375rem;
-    padding: 0.22rem 0.45rem;
-}
-.attendance-table-wrap .dataTables_length,
-.attendance-table-wrap .dataTables_info,
-.attendance-table-wrap .dataTables_paginate {
-    font-size: 0.82rem;
-}
-.attendance-table {
-    min-width: 800px;
-}
-.attendance-table thead th {
-    font-size: 0.85rem;
-    padding: 0.85rem 0.75rem;
-    white-space: nowrap;
+
+.attendance-data-table thead th {
+    font-size: 0.7rem;
     font-weight: 700;
-    background: linear-gradient(135deg, #f0f4f8 0%, #e0e7ff 100%);
     text-transform: uppercase;
-    letter-spacing: 0.05em;
+    letter-spacing: 0.06em;
+    color: #475569;
+    background: linear-gradient(180deg, #f8fafc 0%, #f1f5f9 100%);
+    padding: 0.85rem 1rem;
     border-bottom: 2px solid #cbd5e1;
-}
-.attendance-table td {
-    padding: 0.85rem 0.75rem;
     vertical-align: middle;
-    font-weight: 500;
+    white-space: nowrap;
 }
-.attendance-table .badge {
+
+.attendance-data-table tbody td {
+    padding: 1rem;
+    vertical-align: middle;
+    border-bottom: 1px solid #f1f5f9;
+    color: #1e293b;
+    font-size: 0.875rem;
+    background: #fff;
+}
+
+.attendance-data-table tbody tr {
+    transition: background-color 0.15s ease;
+}
+
+.attendance-data-table tbody tr:hover td {
+    background: #f8fafc;
+}
+
+/* Column widths */
+.col-num { width: 56px; }
+.col-type { width: 80px; }
+.col-date { width: 120px; }
+.col-day { width: 70px; }
+.col-subject { width: auto; min-width: 180px; }
+.col-class { width: 70px; }
+.col-slot { width: 110px; }
+.col-status { width: 130px; }
+.col-action { width: 110px; }
+
+/* Number cell */
+.row-num {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 28px;
+    height: 28px;
+    padding: 0 0.5rem;
+    background: #f1f5f9;
+    color: #64748b;
+    border-radius: 0.4rem;
     font-size: 0.8rem;
     font-weight: 700;
-    padding: 0.5rem 0.65rem;
-    border-radius: 0.5rem;
 }
-.attendance-status-cell .badge {
-    min-width: 90px;
-    text-align: center;
+
+/* Date cell - calendar style */
+.date-cell {
     display: flex;
+    align-items: center;
+    gap: 0.6rem;
+}
+
+.date-cell-day {
+    display: inline-flex;
     align-items: center;
     justify-content: center;
+    width: 40px;
+    height: 40px;
+    background: linear-gradient(135deg, #eef2ff, #e0e7ff);
+    color: #4338ca;
+    border-radius: 0.55rem;
+    font-size: 1.1rem;
+    font-weight: 800;
+    line-height: 1;
+    flex-shrink: 0;
 }
-.attendance-actions {
+
+.date-cell-month {
     display: flex;
-    align-items: center;
-    justify-content: flex-start;
-    gap: 0.65rem;
-    flex-wrap: wrap;
+    flex-direction: column;
+    font-size: 0.75rem;
+    font-weight: 700;
+    color: #1e293b;
+    text-transform: uppercase;
+    line-height: 1.1;
 }
-.attendance-actions .btn,
-.attendance-actions form {
+
+.date-cell-month small {
+    font-size: 0.65rem;
+    color: #94a3b8;
+    font-weight: 600;
+}
+
+.today-tag {
+    display: inline-block;
+    padding: 0.2rem 0.5rem;
+    background: linear-gradient(135deg, #fbbf24, #f59e0b);
+    color: #78350f;
+    border-radius: 0.35rem;
+    font-size: 0.65rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    margin-left: 0.4rem;
+}
+
+/* Day pill */
+.day-pill {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0.3rem 0.6rem;
+    background: #f1f5f9;
+    color: #475569;
+    border-radius: 0.4rem;
+    font-size: 0.75rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    min-width: 42px;
+}
+
+/* Subject cell */
+.subject-cell {
+    display: flex;
+    flex-direction: column;
+    gap: 0.2rem;
+    line-height: 1.3;
+}
+
+.subject-name {
+    font-weight: 700;
+    color: #0f172a;
+    font-size: 0.9rem;
+}
+
+.subject-sem {
+    font-size: 0.7rem;
+    color: #64748b;
+    font-weight: 600;
+}
+
+/* Class badge */
+.class-badge {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 32px;
+    height: 28px;
+    padding: 0 0.6rem;
+    background: linear-gradient(135deg, #e0e7ff, #c7d2fe);
+    color: #1e3a8a;
+    border-radius: 0.4rem;
+    font-size: 0.85rem;
+    font-weight: 800;
+    border: 1px solid #a5b4fc;
+}
+
+/* Type pill (Lec / Lab / Tut) */
+.type-pill {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.3rem;
+    min-width: 56px;
+    height: 26px;
+    padding: 0 0.55rem;
+    border-radius: 0.4rem;
+    font-size: 0.72rem;
+    font-weight: 800;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    line-height: 1;
+    white-space: nowrap;
+    box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
+}
+
+.type-pill i {
+    font-size: 0.8rem;
+    line-height: 1;
+}
+
+.type-lec {
+    background: linear-gradient(135deg, #ddd6fe, #c4b5fd);
+    color: #5b21b6;
+    border: 1px solid #a78bfa;
+}
+
+.type-lab {
+    background: linear-gradient(135deg, #fed7aa, #fdba74);
+    color: #9a3412;
+    border: 1px solid #fb923c;
+}
+
+.type-tut {
+    background: linear-gradient(135deg, #a7f3d0, #6ee7b7);
+    color: #065f46;
+    border: 1px solid #34d399;
+}
+
+/* Slot text */
+.slot-text {
+    font-size: 0.8rem;
+    color: #475569;
+    font-weight: 600;
+    padding: 0.25rem 0.5rem;
+    background: #f8fafc;
+    border-radius: 0.35rem;
+    border: 1px solid #e2e8f0;
+    display: inline-block;
+    white-space: nowrap;
+}
+
+/* Status pills */
+.status-pill {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.3rem;
+    padding: 0.35rem 0.7rem;
+    border-radius: 999px;
+    font-size: 0.72rem;
+    font-weight: 700;
+    line-height: 1.2;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    min-width: 105px;
+    white-space: nowrap;
+}
+
+.status-pill i {
+    font-size: 0.85rem;
+}
+
+.status-filled {
+    background: linear-gradient(135deg, #d1fae5, #a7f3d0);
+    color: #065f46;
+    border: 1px solid #6ee7b7;
+}
+
+.status-pending {
+    background: linear-gradient(135deg, #fee2e2, #fecaca);
+    color: #991b1b;
+    border: 1px solid #fca5a5;
+}
+
+.status-skipped {
+    background: linear-gradient(135deg, #e2e8f0, #cbd5e1);
+    color: #475569;
+    border: 1px solid #94a3b8;
+}
+
+/* Row state variants */
+.row-pending td {
+    background: linear-gradient(90deg, rgba(254, 226, 226, 0.25) 0%, rgba(254, 226, 226, 0.05) 100%) !important;
+}
+
+.row-pending:hover td {
+    background: linear-gradient(90deg, rgba(254, 226, 226, 0.4) 0%, rgba(254, 226, 226, 0.1) 100%) !important;
+}
+
+.row-today td {
+    background: linear-gradient(90deg, rgba(254, 243, 199, 0.4) 0%, rgba(254, 243, 199, 0.1) 100%) !important;
+}
+
+.row-today:hover td {
+    background: linear-gradient(90deg, rgba(254, 243, 199, 0.55) 0%, rgba(254, 243, 199, 0.15) 100%) !important;
+}
+
+.row-skipped td {
+    opacity: 0.55;
+}
+
+.row-skipped:hover td {
+    opacity: 0.75;
+    background: #f8fafc !important;
+}
+
+/* ---------- Action Buttons ---------- */
+.action-buttons {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.35rem;
+}
+
+.action-btn {
+    display: inline-flex !important;
+    align-items: center;
+    justify-content: center;
+    width: 34px !important;
+    height: 34px !important;
+    min-height: 34px !important;
+    padding: 0 !important;
+    border-radius: 0.45rem !important;
+    border-width: 1.5px !important;
+    transition: all 0.2s ease !important;
+    flex-shrink: 0;
+}
+
+.action-btn i {
+    font-size: 0.95rem !important;
     margin: 0 !important;
 }
-.attendance-actions .btn {
-    padding: 0.5rem 0.75rem;
+
+.action-btn:hover {
+    transform: translateY(-2px);
+}
+
+.action-btn-warning {
+    background: linear-gradient(135deg, #fb8c00 0%, #ef6c00 100%) !important;
+    border: 0 !important;
+    color: #fff !important;
+    box-shadow: 0 3px 8px rgba(251, 140, 0, 0.3);
+}
+
+.action-btn-warning:hover {
+    color: #fff !important;
+    box-shadow: 0 6px 14px rgba(251, 140, 0, 0.45) !important;
+    filter: brightness(1.05);
+}
+
+.action-btn-warning i {
+    color: #fff !important;
+}
+
+.action-btn-success {
+    background: #fff !important;
+    border-color: #10b981 !important;
+    color: #059669 !important;
+}
+
+.action-btn-success:hover {
+    background: #10b981 !important;
+    color: #fff !important;
+    box-shadow: 0 4px 10px rgba(16, 185, 129, 0.3);
+}
+
+.action-btn-primary {
+    background: #fff !important;
+    border-color: #5c6bc0 !important;
+    color: #5c6bc0 !important;
+}
+
+.action-btn-primary:hover {
+    background: #5c6bc0 !important;
+    color: #fff !important;
+    box-shadow: 0 4px 10px rgba(92, 107, 192, 0.3);
+}
+
+.action-btn-secondary {
+    background: #fff !important;
+    border-color: #cbd5e1 !important;
+    color: #475569 !important;
+}
+
+.action-btn-secondary:hover {
+    background: #f1f5f9 !important;
+    border-color: #94a3b8 !important;
+    color: #1e293b !important;
+}
+
+/* ---------- DataTables Overrides ---------- */
+.attendance-table-wrap .dataTables_wrapper {
+    padding: 1rem 1.25rem !important;
+}
+
+.attendance-table-wrap .dataTables_filter {
+    float: right;
+    margin-bottom: 1rem;
+}
+
+.attendance-table-wrap .dataTables_filter input {
+    margin-left: 0.5rem;
+    border: 1.5px solid #e2e8f0;
+    border-radius: 0.45rem;
+    padding: 0.45rem 0.75rem;
     font-size: 0.85rem;
-    line-height: 1.3;
-    border-radius: 0.5rem;
-    font-weight: 600;
-    border-width: 2px;
     transition: all 0.2s ease;
-    min-height: 36px;
-    display: flex;
+    background: #fff;
+}
+
+.attendance-table-wrap .dataTables_filter input:focus {
+    border-color: #5c6bc0;
+    box-shadow: 0 0 0 3px rgba(92, 107, 192, 0.15);
+    outline: none;
+}
+
+.attendance-table-wrap .dataTables_filter label {
+    color: #475569;
+    font-weight: 600;
+    font-size: 0.85rem;
+}
+
+.attendance-table-wrap .dataTables_length {
+    float: left;
+    margin-bottom: 1rem;
+}
+
+.attendance-table-wrap .dataTables_length select {
+    border: 1.5px solid #e2e8f0;
+    border-radius: 0.45rem;
+    padding: 0.35rem 0.6rem;
+    margin: 0 0.35rem;
+    font-size: 0.85rem;
+    background: #fff;
+}
+
+.attendance-table-wrap .dataTables_length label {
+    color: #475569;
+    font-weight: 600;
+    font-size: 0.85rem;
+}
+
+.attendance-table-wrap .dataTables_info {
+    font-size: 0.825rem !important;
+    padding-top: 1rem !important;
+    color: #64748b;
+    font-weight: 500;
+}
+
+.attendance-table-wrap .dataTables_paginate {
+    padding-top: 0.75rem !important;
+    float: right;
+}
+
+.attendance-table-wrap .dataTables_paginate .paginate_button {
+    border-radius: 0.45rem !important;
+    padding: 0.4rem 0.8rem !important;
+    border: 1.5px solid #e2e8f0 !important;
+    margin: 0 0.15rem !important;
+    font-size: 0.85rem !important;
+    color: #475569 !important;
+    background: #fff !important;
+    transition: all 0.2s ease !important;
+    font-weight: 600 !important;
+}
+
+.attendance-table-wrap .dataTables_paginate .paginate_button:hover {
+    background: #f1f5f9 !important;
+    border-color: #cbd5e1 !important;
+    color: #1e293b !important;
+}
+
+.attendance-table-wrap .dataTables_paginate .paginate_button.current {
+    background: linear-gradient(135deg, #5c6bc0 0%, #3949ab 100%) !important;
+    border-color: transparent !important;
+    color: #fff !important;
+    box-shadow: 0 3px 8px rgba(92, 107, 192, 0.3);
+}
+
+.attendance-table-wrap .dataTables_paginate .paginate_button.current:hover {
+    background: linear-gradient(135deg, #4a5ab8 0%, #2c3a99 100%) !important;
+    color: #fff !important;
+}
+
+.attendance-table-wrap .dataTables_paginate .paginate_button.disabled {
+    color: #cbd5e1 !important;
+    cursor: not-allowed;
+}
+
+.attendance-table-wrap .dataTables_paginate .paginate_button.disabled:hover {
+    background: #fff !important;
+    border-color: #e2e8f0 !important;
+}
+
+/* ---------- Empty State ---------- */
+.attendance-empty-state {
+    padding: 4rem 2rem;
+    text-align: center;
+}
+
+.attendance-empty-icon {
+    display: inline-flex;
     align-items: center;
     justify-content: center;
+    width: 80px;
+    height: 80px;
+    background: linear-gradient(135deg, #f1f5f9, #e2e8f0);
+    color: #94a3b8;
+    border-radius: 1.5rem;
+    font-size: 2.5rem;
+    margin-bottom: 1.25rem;
 }
-@media (max-width: 767.98px) {
-    .attendance-toolbar {
-        align-items: stretch !important;
+
+.attendance-empty-state h5 {
+    font-size: 1.15rem;
+    font-weight: 700;
+    color: #1e293b;
+    margin-bottom: 0.4rem;
+}
+
+.attendance-empty-state p {
+    font-size: 0.9rem;
+    color: #64748b;
+    margin: 0;
+}
+
+/* ---------- Responsive ---------- */
+@media (max-width: 1199.98px) {
+    .col-num { width: 50px; }
+    .col-type { width: 70px; }
+    .col-date { width: 100px; }
+    .col-day { width: 60px; }
+    .col-class { width: 60px; }
+    .col-slot { width: 100px; }
+    .col-status { width: 120px; }
+    .col-action { width: 100px; }
+}
+
+@media (max-width: 991.98px) {
+    .page-header-content {
+        flex-direction: column;
+        align-items: stretch;
+        text-align: center;
     }
-    .attendance-toolbar .app-page-title {
-        font-size: 1.4rem;
-        font-weight: 700;
-    }
-    .attendance-top-strip {
-        align-items: center !important;
-        flex-wrap: nowrap !important;
-    }
-    .attendance-current-term {
-        width: 100%;
-    }
-    .mapping-cta-btn {
-        width: 100%;
+    .page-header-meta {
+        padding-left: 0;
         justify-content: center;
-        padding: 0.8rem 0.9rem;
-        font-size: 1rem;
     }
-    .attendance-filters {
+    .page-header-actions {
+        justify-content: center;
+    }
+    .page-header-title {
+        justify-content: center;
+    }
+    .page-header-card {
+        padding: 1.25rem 1rem;
+    }
+    .page-header-card::before {
         width: 100%;
+        height: 5px;
+        bottom: auto;
     }
-    .attendance-filter-panel {
-        padding: 0.85rem 0.75rem;
-        gap: 0.6rem;
+    .stat-card {
+        padding: 1rem;
     }
-    .attendance-shell-card .app-card-body {
-        padding: 0.5rem 0.5rem !important;
+    .stat-card-icon {
+        width: 44px;
+        height: 44px;
+        font-size: 1.3rem;
     }
-    .attendance-filter-row {
-        align-items: flex-start;
-        gap: 0.5rem;
-        flex-wrap: wrap;
+    .stat-card-value {
+        font-size: 1.6rem;
+    }
+    .attendance-table-toolbar {
+        flex-direction: column;
+        align-items: stretch;
+    }
+    .attendance-table-toolbar-left {
+        flex-direction: column;
+        align-items: stretch;
+        gap: 0.75rem;
     }
     .attendance-filter-pills {
-        width: 100%;
-        gap: 0.4rem;
-    }
-    .attendance-filter-pills .btn {
-        flex: 1 1 calc(50% - 0.2rem);
-        font-size: 0.9rem;
-        padding: 0.5rem 0.6rem;
-        min-height: 40px;
-    }
-    .attendance-filter-actions,
-    .attendance-compact-btn {
-        width: 100%;
-    }
-    .attendance-bulk-form {
-        width: 100%;
-    }
-    .attendance-bulk-btn {
-        width: 100%;
         justify-content: center;
-        min-height: 44px;
-        font-size: 1rem;
     }
-    .attendance-table {
-        min-width: 100%;
-        font-size: 0.9rem !important;
-    }
-    .attendance-table thead th,
-    .attendance-table td {
-        padding: 0.75rem 0.6rem;
-    }
-    .attendance-table .badge {
-        font-size: 0.78rem;
-        padding: 0.4rem 0.55rem;
-    }
-    .sticky-top {
-        position: static;
-    }
-    .attendance-actions {
-        flex-wrap: wrap;
-        gap: 0.5rem;
-    }
-    .attendance-actions .btn {
-        flex: 1 1 calc(50% - 0.25rem);
-        min-height: 40px;
-        font-size: 0.85rem;
-    }
-    .attendance-stat-value {
-        font-size: 1.5rem;
+    .attendance-table-toolbar-right {
+        justify-content: center;
     }
 }
 
-@media (max-width: 1024px) and (min-width: 768px) {
+@media (max-width: 767.98px) {
+    .page-header-title {
+        font-size: 1.35rem !important;
+    }
+    .page-header-title i {
+        width: 36px;
+        height: 36px;
+        font-size: 1rem;
+    }
+    .page-header-meta {
+        font-size: 0.8rem;
+    }
+    .page-header-meta-item {
+        font-size: 0.75rem;
+        padding: 0.25rem 0.6rem;
+    }
+    .page-header-btn {
+        width: 100%;
+        justify-content: center;
+        padding: 0.65rem 1rem !important;
+    }
+    .stat-card {
+        padding: 0.85rem;
+        gap: 0.75rem;
+    }
+    .stat-card-icon {
+        width: 40px;
+        height: 40px;
+        font-size: 1.2rem;
+    }
+    .stat-card-value {
+        font-size: 1.5rem;
+    }
+    .stat-card-label {
+        font-size: 0.7rem;
+    }
+    .attendance-table-title {
+        font-size: 0.95rem !important;
+    }
     .attendance-filter-pills {
         gap: 0.35rem;
     }
-    .attendance-filter-pills .btn {
-        padding: 0.45rem 0.75rem;
-        font-size: 0.88rem;
-        flex: 0 0 auto;
+    .filter-pill {
+        padding: 0.4rem 0.7rem !important;
+        font-size: 0.75rem !important;
     }
-    .attendance-table {
-        min-width: 750px;
+    .filter-pill-count {
+        min-width: 18px;
+        height: 18px;
+        font-size: 0.65rem;
     }
-    .attendance-table thead th,
-    .attendance-table td {
-        padding: 0.7rem 0.6rem;
-        font-size: 0.9rem;
+    .bulk-autofill-btn {
+        width: 100%;
+        justify-content: center;
+    }
+    .attendance-data-table thead th {
+        padding: 0.65rem 0.5rem;
+        font-size: 0.65rem;
+    }
+    .attendance-data-table tbody td {
+        padding: 0.65rem 0.5rem;
+    }
+    .date-cell-day {
+        width: 34px;
+        height: 34px;
+        font-size: 0.95rem;
+    }
+    .date-cell-month {
+        font-size: 0.65rem;
+    }
+    .today-tag {
+        font-size: 0.6rem;
+        padding: 0.15rem 0.35rem;
+    }
+    .status-pill {
+        min-width: 90px;
+        font-size: 0.65rem;
+        padding: 0.3rem 0.5rem;
+    }
+    .action-btn {
+        width: 30px !important;
+        height: 30px !important;
+        min-height: 30px !important;
+    }
+    .action-btn i {
+        font-size: 0.85rem !important;
+    }
+    .class-badge {
+        width: 28px;
+        height: 24px;
+        font-size: 0.75rem;
+        min-width: 28px;
+    }
+    .type-pill {
+        min-width: 50px;
+        height: 22px;
+        font-size: 0.65rem;
+        padding: 0 0.4rem;
+    }
+    .type-pill i {
+        font-size: 0.7rem;
+    }
+    .day-pill {
+        min-width: 36px;
+        padding: 0.25rem 0.4rem;
+        font-size: 0.7rem;
+    }
+    .subject-name {
+        font-size: 0.85rem;
     }
 }
 
-/* Button & Icon Enhancements */
-.btn i {
-    font-size: 1rem;
-    margin-right: 0.3rem;
-}
-.attendance-bulk-btn i {
-    font-size: 1.1rem;
-}
-.attendance-actions .btn i {
-    font-size: 1rem;
+@media (max-width: 575.98px) {
+    .attendance-data-table {
+        min-width: 720px;
+    }
+    .attendance-table-wrap .dataTables_length,
+    .attendance-table-wrap .dataTables_filter {
+        text-align: left;
+        float: none;
+        width: 100%;
+    }
 }
 </style>
 
@@ -1132,9 +1884,16 @@ document.addEventListener('DOMContentLoaded', function () {
     const dataTable = jQuery(tableElement).DataTable({
         pageLength: 25,
         order: [[1, 'desc']],
+        autoWidth: true,
         columnDefs: [
-            { targets: 0, orderable: false, searchable: false },
-            { targets: 7, orderable: false, searchable: false }
+            { targets: 0, orderable: false, searchable: false, className: 'text-center' },
+            { targets: 1, className: 'text-start' },
+            { targets: 2, className: 'text-center' },
+            { targets: 3, className: 'text-start' },
+            { targets: 4, className: 'text-center' },
+            { targets: 5, className: 'text-center' },
+            { targets: 6, className: 'text-center' },
+            { targets: 7, orderable: false, searchable: false, className: 'text-center' }
         ],
         language: {
             search: 'Search slots:',
