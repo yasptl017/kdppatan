@@ -17,6 +17,7 @@ $manage_pages = [
     'managesubjects.php',
     'managestudents.php',
     'managesemester.php',
+    'manageterm.php',
     'manageslot.php',
     'managelabs.php',
     'bulkupload.php',
@@ -24,6 +25,7 @@ $manage_pages = [
     'editsubjects.php',
     'editstudent.php',
     'editsemester.php',
+    'editterm.php',
     'editslot.php',
 ];
 $is_mapping_page = in_array($current_page, $mapping_pages, true);
@@ -183,6 +185,7 @@ $header_enrollment_search = htmlspecialchars(trim((string)($_GET['enrollment'] ?
                                 <li class="submenu-item"><a class="submenu-link <?= in_array($current_page, ['managefaculty.php', 'editfaculty.php'], true) ? 'active' : '' ?>" href="managefaculty.php"><i class="bi bi-person-badge me-1"></i>Faculty</a></li>
                                 <li class="submenu-item"><a class="submenu-link <?= in_array($current_page, ['managesubjects.php', 'editsubjects.php'], true) ? 'active' : '' ?>" href="managesubjects.php"><i class="bi bi-journal-bookmark me-1"></i>Subjects</a></li>
                                 <li class="submenu-item"><a class="submenu-link <?= in_array($current_page, ['managestudents.php', 'editstudent.php'], true) ? 'active' : '' ?>" href="managestudents.php"><i class="bi bi-people me-1"></i>Students</a></li>
+                                <li class="submenu-item"><a class="submenu-link <?= in_array($current_page, ['manageterm.php', 'editterm.php'], true) ? 'active' : '' ?>" href="manageterm.php"><i class="bi bi-calendar-range me-1"></i>Term</a></li>
                                 <li class="submenu-item"><a class="submenu-link <?= in_array($current_page, ['managesemester.php', 'editsemester.php'], true) ? 'active' : '' ?>" href="managesemester.php"><i class="bi bi-calendar3 me-1"></i>Semester</a></li>
                                 <li class="submenu-item"><a class="submenu-link <?= in_array($current_page, ['manageslot.php', 'editslot.php'], true) ? 'active' : '' ?>" href="manageslot.php"><i class="bi bi-clock me-1"></i>Slots</a></li>
                                 <li class="submenu-item"><a class="submenu-link <?= $current_page === 'managelabs.php' ? 'active' : '' ?>" href="managelabs.php"><i class="bi bi-building me-1"></i>Labs</a></li>
