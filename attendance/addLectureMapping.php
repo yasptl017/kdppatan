@@ -23,6 +23,15 @@ $conn->query("CREATE TABLE IF NOT EXISTS `lecmapping` (
     PRIMARY KEY (`id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
 
+// Ensure slot column is TEXT (not VARCHAR) to hold JSON strings
+$col_check = $conn->query("SHOW COLUMNS FROM lecmapping LIKE 'slot'");
+if ($col_check && $col_check->fetch_assoc()) {
+    $col_row = $col_check->fetch_assoc();
+}
+// Free the result then run alter
+if ($col_check) $col_check->free();
+$conn->query("ALTER TABLE lecmapping MODIFY slot TEXT NOT NULL");
+
 function normalize_repeat_days($input) {
     $days = array_values(array_unique(array_filter(
         array_map('intval', (array)$input),
@@ -152,7 +161,10 @@ if ($edit_id > 0) {
         if ($stored_slot !== '' && $stored_slot[0] === '{') {
             $parsed = json_decode($stored_slot, true);
             if (is_array($parsed)) {
-                $day_slots = $parsed;
+                // Normalize numeric string keys to int keys
+                foreach ($parsed as $k => $v) {
+                    $day_slots[(int)$k] = $v;
+                }
                 // Sync repeat_days from JSON keys for new-format data
                 $repeat_days = array_keys($day_slots);
                 sort($repeat_days);
@@ -207,7 +219,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['save_mapping'])) {
     }
     $repeat_days = normalize_repeat_days($selected_days);
     // Encode day_slots as JSON for storage in slot column
-    $slot_json = json_encode($day_slots);
+    $slot_json = json_encode($day_slots, JSON_FORCE_OBJECT);
 
     $form_values = [
         'faculty' => $faculty,
@@ -401,7 +413,6 @@ $open_terms = array_values(array_unique($open_terms));
                                                             <th>Sem</th>
                                                             <th>Subject</th>
                                                             <th>Class</th>
-                                                            <th>Slot</th>
                                                             <th>Period</th>
                                                             <th>Days</th>
                                                             <th></th>
@@ -409,7 +420,7 @@ $open_terms = array_values(array_unique($open_terms));
                                                     </thead>
                                                     <tbody>
                                                     <?php foreach ($term_mappings as $m): $days = parse_repeat_days_csv($m['repeat_days']); $stored_slot = (string)$m['slot']; $has_per_day = ($stored_slot !== '' && $stored_slot[0] === '{'); $parsed_slots = $has_per_day ? (json_decode($stored_slot, true) ?: []) : []; ?>
-                                                    <tr class="<?= ($is_edit_mode && $edit_id === (int)$m['id']) ? 'table-warning' : '' ?>"><td><?= htmlspecialchars($m['faculty_name'] ?? $m['faculty']) ?></td><td><small class="text-muted">Sem <?= htmlspecialchars($m['sem']) ?></small></td><td><?= htmlspecialchars($m['subject']) ?></td><td><span class="badge bg-primary-subtle text-dark border"><?= htmlspecialchars($m['class']) ?></span></td><td><?php if ($has_per_day): $slot_parts = []; foreach ($days as $d): $sname = $parsed_slots[(string)$d] ?? ''; if ($sname !== ''): $slot_parts[] = '<span class="badge bg-light text-dark border me-1" style="font-weight:500;">' . htmlspecialchars($day_names[$d] ?? (string)$d) . ' ' . htmlspecialchars($sname) . '</span>'; endif; endforeach; echo implode('', $slot_parts); else: ?><span class="badge bg-light text-dark border"><?= htmlspecialchars($stored_slot) ?></span><?php endif; ?></td><td style="white-space:nowrap;"><?= htmlspecialchars($m['start_date']) ?><br><?= htmlspecialchars($m['end_date']) ?></td><td><?php $days_text = implode(', ', array_map(fn($d)=>$day_names[$d] ?? (string)$d, $days)); echo htmlspecialchars($days_text); ?></td><td><div class="d-flex gap-1"><a href="addLectureMapping.php?edit_id=<?= (int)$m['id'] ?><?= $is_embedded ? '&embedded=1' : '' ?>" class="btn btn-outline-warning btn-sm"><i class="bi bi-pencil"></i></a><form method="POST" action="<?= htmlspecialchars($base_self_url) ?>" onsubmit="return confirm('Delete this lecture mapping?')"><input type="hidden" name="delete_id" value="<?= (int)$m['id'] ?>"><button type="submit" name="delete_mapping" class="btn btn-outline-danger btn-sm"><i class="bi bi-trash"></i></button></form></div></td></tr>
+                                                    <tr class="<?= ($is_edit_mode && $edit_id === (int)$m['id']) ? 'table-warning' : '' ?>"><td><?= htmlspecialchars($m['faculty_name'] ?? $m['faculty']) ?></td><td><small class="text-muted">Sem <?= htmlspecialchars($m['sem']) ?></small></td><td><?= htmlspecialchars($m['subject']) ?></td><td><span class="badge bg-primary-subtle text-dark border"><?= htmlspecialchars($m['class']) ?></span></td><td style="white-space:nowrap;"><?= htmlspecialchars($m['start_date']) ?><br><?= htmlspecialchars($m['end_date']) ?></td><td><?php $day_parts = []; foreach ($days as $d): $sname = $has_per_day ? ($parsed_slots[(string)$d] ?? $parsed_slots[$d] ?? '') : $stored_slot; if ($sname !== ''): $day_parts[] = htmlspecialchars($day_names[$d] ?? (string)$d) . ' (' . htmlspecialchars($sname) . ')'; else: $day_parts[] = htmlspecialchars($day_names[$d] ?? (string)$d); endif; endforeach; echo implode(', ', $day_parts); ?></td><td><div class="d-flex gap-1"><a href="addLectureMapping.php?edit_id=<?= (int)$m['id'] ?><?= $is_embedded ? '&embedded=1' : '' ?>" class="btn btn-outline-warning btn-sm"><i class="bi bi-pencil"></i></a><form method="POST" action="<?= htmlspecialchars($base_self_url) ?>" onsubmit="return confirm('Delete this lecture mapping?')"><input type="hidden" name="delete_id" value="<?= (int)$m['id'] ?>"><button type="submit" name="delete_mapping" class="btn btn-outline-danger btn-sm"><i class="bi bi-trash"></i></button></form></div></td></tr>
                                                     <?php endforeach; ?>
                                                     </tbody>
                                                 </table>
