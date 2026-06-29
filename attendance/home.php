@@ -1,6 +1,14 @@
 <?php
 require_once __DIR__ . '/auth.php';
 require_login();
+include('dbconfig.php');
+
+// Fetch last 2 terms (ordered by id DESC)
+$terms_result = $conn->query("SELECT * FROM terms ORDER BY id DESC LIMIT 2");
+$recent_terms = [];
+while ($t = $terms_result->fetch_assoc()) {
+    $recent_terms[] = $t;
+}
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -358,6 +366,41 @@ require_login();
                     </a>
                 </div>
             </div>
+
+            <?php if (!empty($recent_terms)): ?>
+            <!-- Recent Terms -->
+            <div class="row mt-4">
+                <div class="col-12">
+                    <div class="quick-links-section">
+                        <h3><i class="bi bi-calendar-range"></i> Terms</h3>
+                        <div class="table-responsive">
+                            <table class="table table-bordered table-striped mb-0">
+                                <thead>
+                                    <tr>
+                                        <th class="text-center">Academic Year</th>
+                                        <th class="text-center">Term</th>
+                                        <th class="text-center">Sem</th>
+                                        <th class="text-center">Start Date</th>
+                                        <th class="text-center">End Date</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <?php foreach ($recent_terms as $t): ?>
+                                    <tr>
+                                        <td class="text-center"><?= htmlspecialchars($t['academic_year']) ?></td>
+                                        <td class="text-center"><?= htmlspecialchars($t['term']) ?></td>
+                                        <td class="text-center"><?= htmlspecialchars($t['sem']) ?></td>
+                                        <td class="text-center"><?= htmlspecialchars($t['start_date']) ?></td>
+                                        <td class="text-center"><?= htmlspecialchars($t['end_date']) ?></td>
+                                    </tr>
+                                    <?php endforeach; ?>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <?php endif; ?>
 
         </div>
     </div>
