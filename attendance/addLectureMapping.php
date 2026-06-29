@@ -15,7 +15,7 @@ $conn->query("CREATE TABLE IF NOT EXISTS `lecmapping` (
     `sem`         VARCHAR(10)  NOT NULL,
     `subject`     VARCHAR(100) NOT NULL,
     `class`       VARCHAR(5)   NOT NULL,
-    `slot`        VARCHAR(50)  NOT NULL,
+    `slot`        TEXT         NOT NULL,
     `start_date`  DATE         NOT NULL,
     `end_date`    DATE         NOT NULL,
     `repeat_days` VARCHAR(20)  NOT NULL COMMENT '0=Sun,1=Mon,...,6=Sat comma-separated',
@@ -134,6 +134,7 @@ $form_defaults = [
     'start_date' => $default_date,
     'end_date' => $default_date,
     'repeat_days' => [],
+    'day_slots' => [],
 ];
 $form_values = $form_defaults;
 
@@ -144,16 +145,35 @@ if ($edit_id > 0) {
     $row = $stmt->get_result()->fetch_assoc();
     $stmt->close();
     if ($row) {
+        $stored_slot = (string)$row['slot'];
+        // Detect JSON-encoded day_slots (new format) vs plain string (old format)
+        $day_slots = [];
+        $repeat_days = parse_repeat_days_csv($row['repeat_days']);
+        if ($stored_slot !== '' && $stored_slot[0] === '{') {
+            $parsed = json_decode($stored_slot, true);
+            if (is_array($parsed)) {
+                $day_slots = $parsed;
+                // Sync repeat_days from JSON keys for new-format data
+                $repeat_days = array_keys($day_slots);
+                sort($repeat_days);
+            }
+        } elseif ($stored_slot !== '') {
+            // Old format: single slot applied to all repeat days
+            foreach ($repeat_days as $d) {
+                $day_slots[(string)$d] = $stored_slot;
+            }
+        }
         $form_values = [
             'faculty' => (string)$row['faculty'],
             'term' => (string)$row['term'],
             'sem' => (string)$row['sem'],
             'subject' => (string)$row['subject'],
             'class' => (string)$row['class'],
-            'slot' => (string)$row['slot'],
+            'slot' => $stored_slot,
             'start_date' => (string)$row['start_date'],
             'end_date' => (string)$row['end_date'],
-            'repeat_days' => parse_repeat_days_csv($row['repeat_days']),
+            'repeat_days' => $repeat_days,
+            'day_slots' => $day_slots,
         ];
     } else {
         $error_msg = 'Selected lecture mapping not found.';
@@ -172,10 +192,22 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['save_mapping'])) {
     $sem = trim((string)($_POST['sem'] ?? ''));
     $subject = trim((string)($_POST['subject'] ?? ''));
     $class = trim((string)($_POST['class'] ?? ''));
-    $slot = trim((string)($_POST['slot'] ?? ''));
     $start_date = trim((string)($_POST['start_date'] ?? ''));
     $end_date = trim((string)($_POST['end_date'] ?? ''));
-    $repeat_days = normalize_repeat_days($_POST['repeat_days'] ?? []);
+
+    // Build day_slots from day_slot_{0..6} POST fields
+    $day_slots = [];
+    $selected_days = [];
+    for ($d = 0; $d <= 6; $d++) {
+        $slot_val = trim((string)($_POST['day_slot_' . $d] ?? ''));
+        if ($slot_val !== '') {
+            $day_slots[(string)$d] = $slot_val;
+            $selected_days[] = $d;
+        }
+    }
+    $repeat_days = normalize_repeat_days($selected_days);
+    // Encode day_slots as JSON for storage in slot column
+    $slot_json = json_encode($day_slots);
 
     $form_values = [
         'faculty' => $faculty,
@@ -183,21 +215,22 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['save_mapping'])) {
         'sem' => $sem,
         'subject' => $subject,
         'class' => $class,
-        'slot' => $slot,
+        'slot' => $slot_json,
         'start_date' => $start_date,
         'end_date' => $end_date,
         'repeat_days' => $repeat_days,
+        'day_slots' => $day_slots,
     ];
 
-    if ($faculty === '' || $term === '' || $sem === '' || $subject === '' || $class === '' || $slot === '' || $start_date === '' || $end_date === '' || empty($repeat_days)) {
-        $error_msg = 'All fields are required including at least one repeat day.';
+    if ($faculty === '' || $term === '' || $sem === '' || $subject === '' || $class === '' || $start_date === '' || $end_date === '' || empty($repeat_days)) {
+        $error_msg = 'All fields are required including at least one day with a slot selected.';
     } elseif ($end_date < $start_date) {
         $error_msg = 'End date must be on or after start date.';
     } else {
         $repeat_days_csv = implode(',', $repeat_days);
         if ($mapping_id > 0) {
             $stmt = $conn->prepare("UPDATE lecmapping SET faculty = ?, term = ?, sem = ?, subject = ?, class = ?, slot = ?, start_date = ?, end_date = ?, repeat_days = ? WHERE id = ? AND faculty = ?");
-            $stmt->bind_param('sssssssssis', $faculty, $term, $sem, $subject, $class, $slot, $start_date, $end_date, $repeat_days_csv, $mapping_id, $logged_faculty_id);
+            $stmt->bind_param('sssssssssis', $faculty, $term, $sem, $subject, $class, $slot_json, $start_date, $end_date, $repeat_days_csv, $mapping_id, $logged_faculty_id);
             if ($stmt->execute()) {
                 $success_msg = 'Lecture mapping updated successfully.';
             } else {
@@ -206,7 +239,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['save_mapping'])) {
             $stmt->close();
         } else {
             $stmt = $conn->prepare("INSERT INTO lecmapping (faculty, term, sem, subject, class, slot, start_date, end_date, repeat_days) VALUES (?,?,?,?,?,?,?,?,?)");
-            $stmt->bind_param('sssssssss', $faculty, $term, $sem, $subject, $class, $slot, $start_date, $end_date, $repeat_days_csv);
+            $stmt->bind_param('sssssssss', $faculty, $term, $sem, $subject, $class, $slot_json, $start_date, $end_date, $repeat_days_csv);
             if ($stmt->execute()) {
                 $success_msg = 'Lecture mapping saved successfully.';
                 $form_values = $form_defaults;
@@ -299,9 +332,44 @@ $open_terms = array_values(array_unique($open_terms));
                             <div class="mb-3"><label class="form-label">Semester</label><select name="sem" class="form-control" id="semSelect" required><option value="">Select Semester</option><?php foreach ($sem_rows as $s): ?><option value="<?= htmlspecialchars((string)$s['sem']) ?>" <?= ((string)$s['sem'] === (string)$form_values['sem']) ? 'selected' : '' ?>><?= htmlspecialchars((string)$s['sem']) ?></option><?php endforeach; ?></select></div>
                             <div class="mb-3"><label class="form-label">Subject</label><select name="subject" class="form-control" id="subjectSelect" required><option value="">Select Semester first</option></select></div>
                             <div class="mb-3"><label class="form-label">Class</label><select name="class" class="form-control" required><option value="">Select Class</option><?php foreach (['A','B','C','D'] as $c): ?><option value="<?= $c ?>" <?= ($c === (string)$form_values['class']) ? 'selected' : '' ?>><?= $c ?></option><?php endforeach; ?></select></div>
-                            <div class="mb-3"><label class="form-label">Slot</label><select name="slot" class="form-control" required><option value="">Select Slot</option><?php foreach ($slot_rows as $sl): $sn=(string)$sl['timeslot']; ?><option value="<?= htmlspecialchars($sn) ?>" <?= ($sn === (string)$form_values['slot']) ? 'selected' : '' ?>><?= htmlspecialchars($sn) ?></option><?php endforeach; ?></select></div>
                             <div class="row g-2 mb-3"><div class="col-6"><label class="form-label">Repeat Start Date</label><input type="date" name="start_date" class="form-control" value="<?= htmlspecialchars((string)$form_values['start_date']) ?>" required></div><div class="col-6"><label class="form-label">Repeat End Date</label><input type="date" name="end_date" class="form-control" value="<?= htmlspecialchars((string)$form_values['end_date']) ?>" required></div></div>
-                            <div class="mb-4"><label class="form-label">Repeat on Day(s)</label><div class="d-flex flex-wrap gap-2"><?php foreach ([1=>'Mon',2=>'Tue',3=>'Wed',4=>'Thu',5=>'Fri',6=>'Sat',0=>'Sun'] as $num=>$name): $checked=in_array((int)$num,(array)$form_values['repeat_days'],true); ?><label class="btn <?= $checked ? 'btn-primary':'btn-outline-primary' ?> btn-sm px-3 day-toggle" style="cursor:pointer;"><input type="checkbox" name="repeat_days[]" value="<?= $num ?>" class="d-none" <?= $checked ? 'checked':'' ?>><?= $name ?></label><?php endforeach; ?></div></div>
+                            <div class="mb-3"><label class="form-label fw-semibold">Day &amp; Slot Schedule</label>
+                                <div class="table-responsive">
+                                    <table class="table table-bordered mb-0 day-slot-table" style="font-size:0.85rem;">
+                                        <thead class="table-light">
+                                            <tr>
+                                                <th class="text-center" style="width:80px">Day</th>
+                                                <th class="text-center">Slot</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            <?php $day_order = [1=>'Mon',2=>'Tue',3=>'Wed',4=>'Thu',5=>'Fri',6=>'Sat',0=>'Sun']; ?>
+                                            <?php foreach ($day_order as $num => $name):
+                                                $checked = in_array((int)$num, (array)$form_values['repeat_days'], true);
+                                                $saved_slot = (string)($form_values['day_slots'][(string)$num] ?? '');
+                                            ?>
+                                            <tr class="<?= $checked ? 'table-primary' : '' ?> day-slot-row">
+                                                <td class="text-center align-middle">
+                                                    <div class="form-check d-flex justify-content-center">
+                                                        <input type="checkbox" name="day_enable_<?= $num ?>" value="<?= $num ?>" class="form-check-input day-enable-cb" id="day-enable-<?= $num ?>" data-day="<?= $num ?>" <?= $checked ? 'checked' : '' ?>>
+                                                        <label class="form-check-label ms-1 fw-semibold" for="day-enable-<?= $num ?>"><?= $name ?></label>
+                                                    </div>
+                                                </td>
+                                                <td class="align-middle">
+                                                    <select name="day_slot_<?= $num ?>" class="form-control form-control-sm day-slot-select" data-day="<?= $num ?>">
+                                                        <option value="">—</option>
+                                                        <?php foreach ($slot_rows as $sl): $sn = (string)$sl['timeslot']; ?>
+                                                        <option value="<?= htmlspecialchars($sn) ?>" <?= ($sn === $saved_slot) ? 'selected' : '' ?>><?= htmlspecialchars($sn) ?></option>
+                                                        <?php endforeach; ?>
+                                                    </select>
+                                                </td>
+                                            </tr>
+                                            <?php endforeach; ?>
+                                        </tbody>
+                                    </table>
+                                </div>
+                                <small class="text-muted">Check a day and select its slot. Unchecked days are ignored.</small>
+                            </div>
                             <button type="submit" name="save_mapping" class="btn btn-primary w-100"><?= $is_edit_mode ? 'Update Lecture Mapping' : 'Save Lecture Mapping' ?></button>
                         </form>
                     </div></div>
@@ -340,8 +408,8 @@ $open_terms = array_values(array_unique($open_terms));
                                                         </tr>
                                                     </thead>
                                                     <tbody>
-                                                    <?php foreach ($term_mappings as $m): $days = parse_repeat_days_csv($m['repeat_days']); $days_text = implode(', ', array_map(fn($d)=>$day_names[$d] ?? (string)$d, $days)); ?>
-                                                    <tr class="<?= ($is_edit_mode && $edit_id === (int)$m['id']) ? 'table-warning' : '' ?>"><td><?= htmlspecialchars($m['faculty_name'] ?? $m['faculty']) ?></td><td><small class="text-muted">Sem <?= htmlspecialchars($m['sem']) ?></small></td><td><?= htmlspecialchars($m['subject']) ?></td><td><span class="badge bg-primary-subtle text-dark border"><?= htmlspecialchars($m['class']) ?></span></td><td><?= htmlspecialchars($m['slot']) ?></td><td style="white-space:nowrap;"><?= htmlspecialchars($m['start_date']) ?><br><?= htmlspecialchars($m['end_date']) ?></td><td><?= htmlspecialchars($days_text) ?></td><td><div class="d-flex gap-1"><a href="addLectureMapping.php?edit_id=<?= (int)$m['id'] ?><?= $is_embedded ? '&embedded=1' : '' ?>" class="btn btn-outline-warning btn-sm"><i class="bi bi-pencil"></i></a><form method="POST" action="<?= htmlspecialchars($base_self_url) ?>" onsubmit="return confirm('Delete this lecture mapping?')"><input type="hidden" name="delete_id" value="<?= (int)$m['id'] ?>"><button type="submit" name="delete_mapping" class="btn btn-outline-danger btn-sm"><i class="bi bi-trash"></i></button></form></div></td></tr>
+                                                    <?php foreach ($term_mappings as $m): $days = parse_repeat_days_csv($m['repeat_days']); $stored_slot = (string)$m['slot']; $has_per_day = ($stored_slot !== '' && $stored_slot[0] === '{'); $parsed_slots = $has_per_day ? (json_decode($stored_slot, true) ?: []) : []; ?>
+                                                    <tr class="<?= ($is_edit_mode && $edit_id === (int)$m['id']) ? 'table-warning' : '' ?>"><td><?= htmlspecialchars($m['faculty_name'] ?? $m['faculty']) ?></td><td><small class="text-muted">Sem <?= htmlspecialchars($m['sem']) ?></small></td><td><?= htmlspecialchars($m['subject']) ?></td><td><span class="badge bg-primary-subtle text-dark border"><?= htmlspecialchars($m['class']) ?></span></td><td><?php if ($has_per_day): $slot_parts = []; foreach ($days as $d): $sname = $parsed_slots[(string)$d] ?? ''; if ($sname !== ''): $slot_parts[] = '<span class="badge bg-light text-dark border me-1" style="font-weight:500;">' . htmlspecialchars($day_names[$d] ?? (string)$d) . ' ' . htmlspecialchars($sname) . '</span>'; endif; endforeach; echo implode('', $slot_parts); else: ?><span class="badge bg-light text-dark border"><?= htmlspecialchars($stored_slot) ?></span><?php endif; ?></td><td style="white-space:nowrap;"><?= htmlspecialchars($m['start_date']) ?><br><?= htmlspecialchars($m['end_date']) ?></td><td><?php $days_text = implode(', ', array_map(fn($d)=>$day_names[$d] ?? (string)$d, $days)); echo htmlspecialchars($days_text); ?></td><td><div class="d-flex gap-1"><a href="addLectureMapping.php?edit_id=<?= (int)$m['id'] ?><?= $is_embedded ? '&embedded=1' : '' ?>" class="btn btn-outline-warning btn-sm"><i class="bi bi-pencil"></i></a><form method="POST" action="<?= htmlspecialchars($base_self_url) ?>" onsubmit="return confirm('Delete this lecture mapping?')"><input type="hidden" name="delete_id" value="<?= (int)$m['id'] ?>"><button type="submit" name="delete_mapping" class="btn btn-outline-danger btn-sm"><i class="bi bi-trash"></i></button></form></div></td></tr>
                                                     <?php endforeach; ?>
                                                     </tbody>
                                                 </table>
@@ -377,14 +445,31 @@ function populateSubjects(sem, selectedValue = '') {
 }
 semSelect.addEventListener('change', function () { populateSubjects(this.value); });
 populateSubjects(selectedSem || semSelect.value, selectedSubject);
-document.querySelectorAll('.day-toggle').forEach(function (label) {
-    const cb = label.querySelector('input[type=checkbox]');
-    function syncState() {
-        label.classList.toggle('btn-primary', cb.checked);
-        label.classList.toggle('btn-outline-primary', !cb.checked);
+// Day-slot table: toggle row highlight and auto-clear slot when unchecked
+document.querySelectorAll('.day-slot-row').forEach(function (row) {
+    const cb = row.querySelector('.day-enable-cb');
+    const sel = row.querySelector('.day-slot-select');
+    function syncRow() {
+        row.classList.toggle('table-primary', cb.checked);
+        if (!cb.checked) {
+            sel.value = '';
+        }
     }
-    syncState();
-    cb.addEventListener('change', syncState);
+    cb.addEventListener('change', syncRow);
+    // When slot is changed, auto-check the day if not already checked
+    sel.addEventListener('change', function () {
+        if (this.value !== '' && !cb.checked) {
+            cb.checked = true;
+            syncRow();
+        }
+    });
+    // Initial sync
+    if (cb.checked && sel.value === '') {
+        // If day is checked but no slot, auto-select first slot option if available
+        if (sel.options.length > 1) {
+            sel.selectedIndex = 1;
+        }
+    }
 });
 </script>
 <?php include('footer.php'); ?>

@@ -134,6 +134,13 @@ if ($filter_term !== '') {
         $dow = (int)$cur->format('w'); // 0=Sun … 6=Sat
         if (in_array($dow, $repeat_days, true)) {
             $date_str = $cur->format('Y-m-d');
+            // Resolve per-day slot from JSON if stored
+            $slot_value = $m['slot'];
+            if ($slot_value !== '' && $slot_value[0] === '{') {
+                $decoded = json_decode($slot_value, true);
+                $slot_value = is_array($decoded) && isset($decoded[(string)$dow]) && $decoded[(string)$dow] !== '' ? $decoded[(string)$dow] : '';
+            }
+            if ($slot_value === '') continue;
             $slot_list[] = [
                 'mapping_id' => $m['id'],
                 'date'       => $date_str,
@@ -142,7 +149,7 @@ if ($filter_term !== '') {
                 'sem'        => $m['sem'],
                 'subject'    => $m['subject'],
                 'class'      => $m['class'],
-                'slot'       => $m['slot'],
+                'slot'       => $slot_value,
                 'skipped'    => isset($exceptions_set[$m['id'] . '|' . $date_str]),
             ];
         }
