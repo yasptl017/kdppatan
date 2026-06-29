@@ -14,8 +14,10 @@ $fac_row = $fac_id_stmt->get_result()->fetch_assoc();
 $fac_id_stmt->close();
 $logged_faculty_id = $fac_row ? (string)$fac_row['id'] : '0';
 
-$mappings_stmt = $conn->prepare("SELECT term FROM lecmapping WHERE faculty = ?");
-$mappings_stmt->bind_param('s', $logged_faculty_id);
+$mappings_stmt = $conn->prepare("SELECT term FROM lecmapping WHERE faculty = ?
+    UNION SELECT term FROM labmapping WHERE faculty = ?
+    UNION SELECT term FROM tutmapping WHERE faculty = ?");
+$mappings_stmt->bind_param('sss', $logged_faculty_id, $logged_faculty_id, $logged_faculty_id);
 $mappings_stmt->execute();
 $mappings_rows = $mappings_stmt->get_result()->fetch_all(MYSQLI_ASSOC);
 $mappings_stmt->close();

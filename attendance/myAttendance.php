@@ -71,12 +71,35 @@ $filter_term    = trim((string)($_GET['term'] ?? ''));
 $filter_status  = $_GET['status']  ?? 'unfilled';   // all | filled | unfilled | skipped
 $filter_mapping = (int)($_GET['mapping'] ?? 0); // specific mapping id, 0 = all
 
-// ── Load all mappings for this faculty ───────────────────────────────────────
-$mappings_stmt = $conn->prepare("SELECT * FROM lecmapping WHERE faculty = ? ORDER BY start_date, id");
-$mappings_stmt->bind_param('s', $logged_faculty_id);
-$mappings_stmt->execute();
-$mappings_rows = $mappings_stmt->get_result()->fetch_all(MYSQLI_ASSOC);
-$mappings_stmt->close();
+// ── Load all mappings (lecture, lab, tutorial) for this faculty ─────────────
+$mappings_rows = [];
+// Lecture mappings
+$lec_stmt = $conn->prepare("SELECT 'lecture' AS mapping_type, id, faculty, term, sem, subject, class AS class_or_batch, '' AS labNo, slot, start_date, end_date, repeat_days FROM lecmapping WHERE faculty = ?");
+$lec_stmt->bind_param('s', $logged_faculty_id);
+$lec_stmt->execute();
+$lec_res = $lec_stmt->get_result();
+while ($r = $lec_res->fetch_assoc()) {
+    $mappings_rows[] = $r;
+}
+$lec_stmt->close();
+// Lab mappings
+$lab_stmt = $conn->prepare("SELECT 'lab' AS mapping_type, id, faculty, term, sem, subject, batch AS class_or_batch, labNo, slot, start_date, end_date, repeat_days FROM labmapping WHERE faculty = ?");
+$lab_stmt->bind_param('s', $logged_faculty_id);
+$lab_stmt->execute();
+$lab_res = $lab_stmt->get_result();
+while ($r = $lab_res->fetch_assoc()) {
+    $mappings_rows[] = $r;
+}
+$lab_stmt->close();
+// Tutorial mappings
+$tut_stmt = $conn->prepare("SELECT 'tutorial' AS mapping_type, id, faculty, term, sem, subject, tutBatch AS class_or_batch, '' AS labNo, slot, start_date, end_date, repeat_days FROM tutmapping WHERE faculty = ?");
+$tut_stmt->bind_param('s', $logged_faculty_id);
+$tut_stmt->execute();
+$tut_res = $tut_stmt->get_result();
+while ($r = $tut_res->fetch_assoc()) {
+    $mappings_rows[] = $r;
+}
+$tut_stmt->close();
 
 $available_terms = [];
 foreach ($mappings_rows as $mapping_row) {
@@ -94,33 +117,36 @@ if ($filter_term === '') {
 }
 
 // ── Load exceptions for this faculty's mappings ───────────────────────────────
-$exceptions_set = []; // "mapping_id|date" => true
+$exceptions_set = []; // "type:mapping_id|date" => true
 if (!empty($mappings_rows)) {
-    $mapping_ids = array_column($mappings_rows, 'id');
-    $exc_placeholders = implode(',', array_fill(0, count($mapping_ids), '?'));
-    $exc_types = str_repeat('i', count($mapping_ids));
-    $exc_stmt = $conn->prepare("SELECT mapping_id, date FROM lecmapping_exceptions WHERE mapping_id IN ($exc_placeholders)");
-    $exc_stmt->bind_param($exc_types, ...$mapping_ids);
-    $exc_stmt->execute();
-    $exc_res = $exc_stmt->get_result();
-    while ($er = $exc_res->fetch_assoc()) {
-        $exceptions_set[$er['mapping_id'] . '|' . $er['date']] = true;
+    $lec_mapping_ids = array_column(array_filter($mappings_rows, fn($r) => ($r['mapping_type'] ?? '') === 'lecture'), 'id');
+    if (!empty($lec_mapping_ids)) {
+        $exc_placeholders = implode(',', array_fill(0, count($lec_mapping_ids), '?'));
+        $exc_types = str_repeat('i', count($lec_mapping_ids));
+        $exc_stmt = $conn->prepare("SELECT mapping_id, date FROM lecmapping_exceptions WHERE mapping_id IN ($exc_placeholders)");
+        $exc_stmt->bind_param($exc_types, ...$lec_mapping_ids);
+        $exc_stmt->execute();
+        $exc_res = $exc_stmt->get_result();
+        while ($er = $exc_res->fetch_assoc()) {
+            $exceptions_set['lecture:' . $er['mapping_id'] . '|' . $er['date']] = true;
+        }
+        $exc_stmt->close();
     }
-    $exc_stmt->close();
 }
 
 // ── Expand each mapping into individual date slots ───────────────────────────
-// slot_list: array of [mapping_id, date, faculty, term, sem, subject, class, slot, skipped]
+// slot_list: array of [mapping_id, mapping_type, date, faculty, term, sem, subject, class_or_batch, slot, batch_label, lab_label, skipped]
 $slot_list = [];
 if ($filter_term !== '') {
     foreach ($mappings_rows as $m) {
     $mapping_term = trim((string)($m['term'] ?? ''));
-    if ($filter_mapping > 0 && $m['id'] !== $filter_mapping) continue;
+    $mapping_type = (string)($m['mapping_type'] ?? 'lecture');
+    if ($filter_mapping > 0 && ((int)$m['id']) !== $filter_mapping) continue;
         if (strcasecmp($mapping_term, $filter_term) !== 0) continue;
 
-        $repeat_days = array_map('intval', explode(',', $m['repeat_days']));
-        $cur = new DateTime($m['start_date']);
-        $end = new DateTime($m['end_date']);
+        $repeat_days = array_map('intval', explode(',', (string)$m['repeat_days']));
+        $cur = new DateTime((string)$m['start_date']);
+        $end = new DateTime((string)$m['end_date']);
         $today = new DateTime('today');
         if ($end > $today) {
             $end = $today;
@@ -130,28 +156,73 @@ if ($filter_term !== '') {
         }
         $end->modify('+1 day'); // make end inclusive
 
+        // Pre-decode JSON storage fields
+        $stored_slot = (string)($m['slot'] ?? '');
+        $stored_batch = (string)($m['class_or_batch'] ?? '');
+        $stored_lab = (string)($m['labNo'] ?? '');
+        $parsed_slots = null;
+        $parsed_batches = null;
+        $parsed_labs = null;
+        if ($stored_slot !== '' && $stored_slot[0] === '{') {
+            $parsed_slots = json_decode($stored_slot, true) ?: [];
+        }
+        if ($stored_batch !== '' && $stored_batch[0] === '{') {
+            $parsed_batches = json_decode($stored_batch, true) ?: [];
+        }
+        if ($stored_lab !== '' && $stored_lab[0] === '{') {
+            $parsed_labs = json_decode($stored_lab, true) ?: [];
+        }
+
         while ($cur < $end) {
         $dow = (int)$cur->format('w'); // 0=Sun … 6=Sat
         if (in_array($dow, $repeat_days, true)) {
             $date_str = $cur->format('Y-m-d');
+            $dow_str = (string)$dow;
             // Resolve per-day slot from JSON if stored
-            $slot_value = $m['slot'];
-            if ($slot_value !== '' && $slot_value[0] === '{') {
-                $decoded = json_decode($slot_value, true);
-                $slot_value = is_array($decoded) && isset($decoded[(string)$dow]) && $decoded[(string)$dow] !== '' ? $decoded[(string)$dow] : '';
+            if ($parsed_slots !== null) {
+                $slot_value = (string)($parsed_slots[$dow] ?? $parsed_slots[$dow_str] ?? '');
+            } else {
+                $slot_value = $stored_slot;
             }
-            if ($slot_value === '') continue;
-            $slot_list[] = [
-                'mapping_id' => $m['id'],
-                'date'       => $date_str,
-                'faculty'    => $m['faculty'],
-                'term'       => $mapping_term,
-                'sem'        => $m['sem'],
-                'subject'    => $m['subject'],
-                'class'      => $m['class'],
-                'slot'       => $slot_value,
-                'skipped'    => isset($exceptions_set[$m['id'] . '|' . $date_str]),
-            ];
+            if ($slot_value === '') { $cur->modify('+1 day'); continue; }
+
+            // For lab mappings, expand into one entry per batch
+            if ($mapping_type === 'lab' && $parsed_batches !== null && is_array($parsed_batches[$dow] ?? null)) {
+                $batches_day = (array)($parsed_batches[$dow] ?? $parsed_batches[$dow_str] ?? []);
+                $labs_day = (array)($parsed_labs[$dow] ?? $parsed_labs[$dow_str] ?? []);
+                foreach ($batches_day as $bi => $batch_val) {
+                    $batch_label = (string)$batch_val;
+                    $lab_label = (string)($labs_day[$bi] ?? '');
+                    if ($batch_label === '' || $lab_label === '') continue;
+                    $slot_list[] = [
+                        'mapping_id'   => (int)$m['id'],
+                        'mapping_type' => $mapping_type,
+                        'date'         => $date_str,
+                        'faculty'      => (string)$m['faculty'],
+                        'term'         => $mapping_term,
+                        'sem'          => (string)$m['sem'],
+                        'subject'      => (string)$m['subject'],
+                        'class'        => $batch_label,
+                        'slot'         => $slot_value,
+                        'lab_no'       => $lab_label,
+                        'skipped'      => isset($exceptions_set[$mapping_type . ':' . (int)$m['id'] . '|' . $date_str]),
+                    ];
+                }
+            } else {
+                $slot_list[] = [
+                    'mapping_id'   => (int)$m['id'],
+                    'mapping_type' => $mapping_type,
+                    'date'         => $date_str,
+                    'faculty'      => (string)$m['faculty'],
+                    'term'         => $mapping_term,
+                    'sem'          => (string)$m['sem'],
+                    'subject'      => (string)$m['subject'],
+                    'class'        => (string)$stored_batch,
+                    'slot'         => $slot_value,
+                    'lab_no'       => '',
+                    'skipped'      => isset($exceptions_set[$mapping_type . ':' . (int)$m['id'] . '|' . $date_str]),
+                ];
+            }
         }
         $cur->modify('+1 day');
     }
@@ -162,7 +233,7 @@ if ($filter_term !== '') {
 usort($slot_list, fn($a, $b) => strcmp($b['date'], $a['date']));
 
 // ── Check which slots are already filled ─────────────────────────────────────
-// Build a lookup: "term|sem|subject|class|date|slot" => attendance_id
+// Build a lookup: "type|term|sem|subject|class_or_batch|date|slot" => [attendance_id, attendance_table]
 $filled_lookup = [];
 if (!empty($slot_list)) {
     // Collect unique term/sem combos to query efficiently
@@ -175,12 +246,35 @@ if (!empty($slot_list)) {
         $types = str_repeat('s', count($unique_terms) + count($unique_sems));
         $params = array_merge($unique_terms, $unique_sems);
 
+        // Lecture attendance
         $att_stmt = $conn->prepare("SELECT id, date, time, term, sem, subject, class FROM lecattendance WHERE term IN ($t_placeholders) AND sem IN ($s_placeholders)");
         $att_stmt->bind_param($types, ...$params);
         $att_stmt->execute();
         $att_res = $att_stmt->get_result();
         while ($ar = $att_res->fetch_assoc()) {
-            $key = $ar['term'] . '|' . $ar['sem'] . '|' . $ar['subject'] . '|' . $ar['class'] . '|' . $ar['date'] . '|' . $ar['time'];
+            $key = 'lecture|' . $ar['term'] . '|' . $ar['sem'] . '|' . $ar['subject'] . '|' . $ar['class'] . '|' . $ar['date'] . '|' . $ar['time'];
+            $filled_lookup[$key] = (int)$ar['id'];
+        }
+        $att_stmt->close();
+
+        // Lab attendance
+        $att_stmt = $conn->prepare("SELECT id, date, time, term, sem, subject, batch FROM labattendance WHERE term IN ($t_placeholders) AND sem IN ($s_placeholders)");
+        $att_stmt->bind_param($types, ...$params);
+        $att_stmt->execute();
+        $att_res = $att_stmt->get_result();
+        while ($ar = $att_res->fetch_assoc()) {
+            $key = 'lab|' . $ar['term'] . '|' . $ar['sem'] . '|' . $ar['subject'] . '|' . $ar['batch'] . '|' . $ar['date'] . '|' . $ar['time'];
+            $filled_lookup[$key] = (int)$ar['id'];
+        }
+        $att_stmt->close();
+
+        // Tutorial attendance
+        $att_stmt = $conn->prepare("SELECT id, date, time, term, sem, subject, batch FROM tutattendance WHERE term IN ($t_placeholders) AND sem IN ($s_placeholders)");
+        $att_stmt->bind_param($types, ...$params);
+        $att_stmt->execute();
+        $att_res = $att_stmt->get_result();
+        while ($ar = $att_res->fetch_assoc()) {
+            $key = 'tutorial|' . $ar['term'] . '|' . $ar['sem'] . '|' . $ar['subject'] . '|' . $ar['batch'] . '|' . $ar['date'] . '|' . $ar['time'];
             $filled_lookup[$key] = (int)$ar['id'];
         }
         $att_stmt->close();
@@ -189,7 +283,8 @@ if (!empty($slot_list)) {
 
 // ── Annotate each slot with filled status ─────────────────────────────────────
 foreach ($slot_list as &$slot) {
-    $key = $slot['term'] . '|' . $slot['sem'] . '|' . $slot['subject'] . '|' . $slot['class'] . '|' . $slot['date'] . '|' . $slot['slot'];
+    $type = $slot['mapping_type'];
+    $key = $type . '|' . $slot['term'] . '|' . $slot['sem'] . '|' . $slot['subject'] . '|' . $slot['class'] . '|' . $slot['date'] . '|' . $slot['slot'];
     $slot['filled']        = isset($filled_lookup[$key]);
     $slot['attendance_id'] = $filled_lookup[$key] ?? null;
 }
@@ -205,7 +300,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['autofill_pending_max'
     ];
 
     if (empty($bulk_candidates)) {
-        $redirect_params['err'] = 'No pending lecture slots found for autofill.';
+        $redirect_params['err'] = 'No pending slots found for autofill.';
         header('Location: myAttendance.php?' . http_build_query($redirect_params));
         exit();
     }
@@ -214,10 +309,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['autofill_pending_max'
     $lec_auto_stmt = $conn->prepare("SELECT presentNo FROM lecattendance WHERE term = ? AND sem = ? AND class = ? AND date = ?");
     $lab_auto_stmt = $conn->prepare("SELECT presentNo FROM labattendance WHERE term = ? AND sem = ? AND date = ? AND COALESCE(TRIM(labNo), '') <> ''");
     $tut_auto_stmt = $conn->prepare("SELECT presentNo FROM tutattendance WHERE term = ? AND sem = ? AND date = ?");
-    $exists_stmt = $conn->prepare("SELECT id FROM lecattendance WHERE date = ? AND time = ? AND term = ? AND sem = ? AND subject = ? AND class = ? LIMIT 1");
-    $insert_stmt = $conn->prepare("INSERT INTO lecattendance (date, logdate, time, term, faculty, sem, subject, class, presentNo, absentNo, description) VALUES (?, CURDATE(), ?, ?, ?, ?, ?, ?, ?, ?, ?)");
+    // Three exists/insert pairs, one per attendance table
+    $lec_exists = $conn->prepare("SELECT id FROM lecattendance WHERE date = ? AND time = ? AND term = ? AND sem = ? AND subject = ? AND class = ? LIMIT 1");
+    $lec_insert = $conn->prepare("INSERT INTO lecattendance (date, logdate, time, term, faculty, sem, subject, class, presentNo, absentNo, description) VALUES (?, CURDATE(), ?, ?, ?, ?, ?, ?, ?, ?, ?)");
+    $lab_exists = $conn->prepare("SELECT id FROM labattendance WHERE date = ? AND time = ? AND term = ? AND sem = ? AND subject = ? AND batch = ? LIMIT 1");
+    $lab_insert = $conn->prepare("INSERT INTO labattendance (date, logdate, time, term, faculty, sem, subject, batch, presentNo, labNo) VALUES (?, CURDATE(), ?, ?, ?, ?, ?, ?, ?, ?)");
+    $tut_exists = $conn->prepare("SELECT id FROM tutattendance WHERE date = ? AND time = ? AND term = ? AND sem = ? AND subject = ? AND batch = ? LIMIT 1");
+    $tut_insert = $conn->prepare("INSERT INTO tutattendance (date, logdate, time, term, faculty, sem, subject, batch, presentNo) VALUES (?, CURDATE(), ?, ?, ?, ?, ?, ?, ?)");
 
-    if (!$class_students_stmt || !$lec_auto_stmt || !$lab_auto_stmt || !$tut_auto_stmt || !$exists_stmt || !$insert_stmt) {
+    if (!$class_students_stmt || !$lec_auto_stmt || !$lab_auto_stmt || !$tut_auto_stmt || !$lec_exists || !$lec_insert || !$lab_exists || !$lab_insert || !$tut_exists || !$tut_insert) {
         $redirect_params['err'] = 'Bulk autofill is unavailable right now. Please try again.';
         header('Location: myAttendance.php?' . http_build_query($redirect_params));
         exit();
@@ -239,14 +339,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['autofill_pending_max'
     $processed_slot_keys = [];
 
     $created = 0;
-    $autofilled = 0;
     $skipped_no_autofill = 0;
     $skipped_existing = 0;
     $skipped_duplicate = 0;
     $failed = 0;
 
     foreach ($bulk_candidates as $slot) {
-        $slot_key = $slot['term'] . '|' . $slot['sem'] . '|' . $slot['subject'] . '|' . $slot['class'] . '|' . $slot['date'] . '|' . $slot['slot'];
+        $slot_type = (string)($slot['mapping_type'] ?? 'lecture');
+        $slot_key = $slot_type . '|' . $slot['term'] . '|' . $slot['sem'] . '|' . $slot['subject'] . '|' . $slot['class'] . '|' . $slot['date'] . '|' . $slot['slot'];
         if (isset($processed_slot_keys[$slot_key])) {
             $skipped_duplicate++;
             continue;
@@ -260,6 +360,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['autofill_pending_max'
         $sem = (string)$slot['sem'];
         $subject = (string)$slot['subject'];
         $class = (string)$slot['class'];
+        $lab_no = (string)($slot['lab_no'] ?? '');
+
+        // Pick the right exists/insert based on type
+        if ($slot_type === 'lecture') {
+            $exists_stmt = $lec_exists;
+            $insert_stmt = $lec_insert;
+        } elseif ($slot_type === 'lab') {
+            $exists_stmt = $lab_exists;
+            $insert_stmt = $lab_insert;
+        } else {
+            $exists_stmt = $tut_exists;
+            $insert_stmt = $tut_insert;
+        }
 
         $exists_stmt->bind_param('ssssss', $date, $time, $term, $sem, $subject, $class);
         $exists_stmt->execute();
@@ -363,11 +476,20 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['autofill_pending_max'
 
         $present_csv = implode(',', $present_list);
         $absent_csv = implode(',', $absent_list);
-        $description = null;
-        $insert_stmt->bind_param('ssssssssss', $date, $time, $term, $faculty, $sem, $subject, $class, $present_csv, $absent_csv, $description);
+
+        if ($slot_type === 'lecture') {
+            $description = null;
+            $insert_stmt->bind_param('ssssssssss', $date, $time, $term, $faculty, $sem, $subject, $class, $present_csv, $absent_csv, $description);
+        } elseif ($slot_type === 'lab') {
+            // Lab attendance columns: date, logdate, time, term, faculty, sem, subject, batch, presentNo, labNo
+            $insert_stmt->bind_param('sssssssss', $date, $time, $term, $faculty, $sem, $subject, $class, $present_csv, $lab_no);
+        } else {
+            // Tutorial: date, logdate, time, term, faculty, sem, subject, batch, presentNo
+            $insert_stmt->bind_param('sssssssss', $date, $time, $term, $faculty, $sem, $subject, $class, $present_csv);
+        }
+
         if ($insert_stmt->execute()) {
             $created++;
-            $autofilled++;
         } else {
             $failed++;
         }
@@ -377,13 +499,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['autofill_pending_max'
     $lec_auto_stmt->close();
     $lab_auto_stmt->close();
     $tut_auto_stmt->close();
-    $exists_stmt->close();
-    $insert_stmt->close();
+    $lec_exists->close();
+    $lec_insert->close();
+    $lab_exists->close();
+    $lab_insert->close();
+    $tut_exists->close();
+    $tut_insert->close();
 
     if ($created === 0 && $failed === 0) {
         $redirect_params['err'] = 'No pending slots were inserted. Existing entries may already be present or no autofill source had students.';
     } else {
-        $summary = "Autofill complete: created {$created}, autofilled {$autofilled}, skipped no source {$skipped_no_autofill}, skipped existing {$skipped_existing}";
+        $summary = "Autofill complete: created {$created}, skipped no source {$skipped_no_autofill}, skipped existing {$skipped_existing}";
         if ($skipped_duplicate > 0) {
             $summary .= ", skipped duplicate {$skipped_duplicate}";
         }
@@ -484,7 +610,7 @@ $day_names = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 
             <?php if (empty($mappings_rows)): ?>
                 <div class="alert alert-info mb-3">
-                    <i class="bi bi-info-circle me-2"></i>No lecture mappings found for your account.
+                    <i class="bi bi-info-circle me-2"></i>No mappings (lecture / lab / tutorial) found for your account.
                     <a href="addLectureMapping.php" class="alert-link">Create a mapping</a> to get started.
                 </div>
             <?php else: ?>
@@ -571,7 +697,7 @@ $day_names = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
                                         <th class="col-date">Date</th>
                                         <th class="text-center col-day">Day</th>
                                         <th class="col-subject">Subject</th>
-                                        <th class="text-center col-class">Class</th>
+                                        <th class="text-center col-class">Class / Batch</th>
                                         <th class="text-center col-slot">Slot</th>
                                         <th class="text-center col-status">Status</th>
                                         <th class="text-center col-action">Action</th>
@@ -582,18 +708,47 @@ $day_names = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
                                     $date_obj = new DateTime($slot['date']);
                                     $dow_name = $day_names[(int)$date_obj->format('w')];
                                     $is_today = ($slot['date'] === date('Y-m-d'));
-                                    $params = http_build_query([
-                                        'faculty' => $slot['faculty'],
-                                        'term'    => $slot['term'],
-                                        'sem'     => $slot['sem'],
-                                        'subject' => $slot['subject'],
-                                        'class'   => $slot['class'],
-                                        'date'    => $slot['date'],
-                                        'slot'    => $slot['slot'],
-                                    ]);
-                                    $take_url = 'takelecatt.php?' . $params;
-                                    $edit_url = $slot['filled'] ? 'editlecatt.php?id=' . $slot['attendance_id'] : null;
-                                    $summary_url = $slot['filled'] ? 'attendanceSummary.php?type=lecture&id=' . $slot['attendance_id'] : null;
+                                    $mapping_type = $slot['mapping_type'];
+                                    // Build params per type
+                                    if ($mapping_type === 'lecture') {
+                                        $params = http_build_query([
+                                            'faculty' => $slot['faculty'],
+                                            'term'    => $slot['term'],
+                                            'sem'     => $slot['sem'],
+                                            'subject' => $slot['subject'],
+                                            'class'   => $slot['class'],
+                                            'date'    => $slot['date'],
+                                            'slot'    => $slot['slot'],
+                                        ]);
+                                    } else {
+                                        // Lab & Tutorial use 'batch'
+                                        $params = http_build_query([
+                                            'faculty' => $slot['faculty'],
+                                            'term'    => $slot['term'],
+                                            'sem'     => $slot['sem'],
+                                            'subject' => $slot['subject'],
+                                            'batch'   => $slot['class'],
+                                            'date'    => $slot['date'],
+                                            'slot'    => $slot['slot'],
+                                        ]);
+                                    }
+                                    if ($mapping_type === 'lecture') {
+                                        $take_url   = 'takelecatt.php?' . $params;
+                                        $edit_url   = $slot['filled'] ? 'editlecatt.php?id=' . $slot['attendance_id'] : null;
+                                        $summary_url = $slot['filled'] ? 'attendanceSummary.php?type=lecture&id=' . $slot['attendance_id'] : null;
+                                    } elseif ($mapping_type === 'lab') {
+                                        $take_url   = 'takelabatt.php?' . $params;
+                                        $edit_url   = $slot['filled'] ? 'editlabatt.php?id=' . $slot['attendance_id'] : null;
+                                        $summary_url = $slot['filled'] ? 'attendanceSummary.php?type=lab&id=' . $slot['attendance_id'] : null;
+                                    } else {
+                                        $take_url   = 'taketutatt.php?' . $params;
+                                        $edit_url   = $slot['filled'] ? 'edittutatt.php?id=' . $slot['attendance_id'] : null;
+                                        $summary_url = $slot['filled'] ? 'attendanceSummary.php?type=tutorial&id=' . $slot['attendance_id'] : null;
+                                    }
+                                    $type_pill_class = $mapping_type === 'lab' ? 'type-lab' : ($mapping_type === 'tutorial' ? 'type-tut' : 'type-lec');
+                                    $type_pill_label = $mapping_type === 'lab' ? 'Lab' : ($mapping_type === 'tutorial' ? 'Tut' : 'Lec');
+                                    $type_pill_icon  = $mapping_type === 'lab' ? 'bi-camera-video' : ($mapping_type === 'tutorial' ? 'bi-book' : 'bi-easel2');
+                                    $class_label = $mapping_type === 'lecture' ? 'Class' : 'Batch';
                                     $row_class = '';
                                     if ($slot['skipped']) $row_class = 'row-skipped';
                                     elseif (!$slot['filled'] && $is_today) $row_class = 'row-today';
@@ -602,9 +757,9 @@ $day_names = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
                                 <tr class="<?= $row_class ?>">
                                     <td class="text-center col-num"><span class="row-num"><?= $i + 1 ?></span></td>
                                     <td class="text-center col-type">
-                                        <span class="type-pill type-lec" title="Lecture"><i class="bi bi-easel2"></i>Lec</span>
+                                        <span class="type-pill <?= $type_pill_class ?>" title="<?= ucfirst($type_pill_label) ?>"><i class="bi <?= $type_pill_icon ?>"></i><?= $type_pill_label ?></span>
                                     </td>
-                                    <td class="col-date">
+                                    <td class="col-date" data-sort="<?= htmlspecialchars($slot['date']) ?>">
                                         <div class="date-cell">
                                             <span class="date-cell-day"><?= date('d', strtotime($slot['date'])) ?></span>
                                             <div class="date-cell-month">
@@ -1850,18 +2005,19 @@ document.addEventListener('DOMContentLoaded', function () {
 
     const dataTable = jQuery(tableElement).DataTable({
         pageLength: 25,
-        order: [[1, 'desc']],
+        order: [[2, 'desc']],
         autoWidth: true,
         dom: '<"row g-2 mb-2"<"col-sm-6 col-md-6 d-flex align-items-center"l><"col-sm-6 col-md-6 d-flex justify-content-end align-items-center"f>>t<"row mt-2"<"col-sm-12 col-md-6"i><"col-sm-12 col-md-6 d-flex justify-content-end"p>>',
         columnDefs: [
             { targets: 0, orderable: false, searchable: false, className: 'text-center' },
-            { targets: 1, className: 'text-start' },
+            { targets: 1, className: 'text-start', orderable: false },
             { targets: 2, className: 'text-center' },
-            { targets: 3, className: 'text-start' },
+            { targets: 3, className: 'text-start', orderable: false },
             { targets: 4, className: 'text-center' },
             { targets: 5, className: 'text-center' },
             { targets: 6, className: 'text-center' },
-            { targets: 7, orderable: false, searchable: false, className: 'text-center' }
+            { targets: 7, orderable: false, searchable: false, className: 'text-center' },
+            { targets: 8, orderable: false, searchable: false, className: 'text-center' }
         ],
         language: {
             search: 'Search slots:',

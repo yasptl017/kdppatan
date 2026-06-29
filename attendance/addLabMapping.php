@@ -433,7 +433,9 @@ $day_names = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
                                             <option value="">Select Semester first</option>
                                         </select>
                                     </div>
+                                </div>
 
+                                <div class="row g-3 mb-3">
                                     <div class="col-6 col-md-2">
                                         <label class="form-label">Start Date</label>
                                         <input type="date" name="start_date" class="form-control" value="<?= htmlspecialchars((string)$form_values['start_date']) ?>" required>

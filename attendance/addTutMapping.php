@@ -387,13 +387,15 @@ $day_names = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
                                             <?php endif; ?>
                                         </select>
                                     </div>
+                                </div>
 
-                                    <div class="col-6 col-md-1">
+                                <div class="row g-3 mb-3">
+                                    <div class="col-6 col-md-2">
                                         <label class="form-label">Start Date</label>
                                         <input type="date" name="start_date" class="form-control" value="<?= htmlspecialchars((string)$form_values['start_date']) ?>" required>
                                     </div>
 
-                                    <div class="col-6 col-md-1">
+                                    <div class="col-6 col-md-2">
                                         <label class="form-label">End Date</label>
                                         <input type="date" name="end_date" class="form-control" value="<?= htmlspecialchars((string)$form_values['end_date']) ?>" required>
                                     </div>
