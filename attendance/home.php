@@ -3,8 +3,8 @@ require_once __DIR__ . '/auth.php';
 require_login();
 include('dbconfig.php');
 
-// Fetch last 2 terms (ordered by id DESC)
-$terms_result = $conn->query("SELECT * FROM terms ORDER BY id DESC LIMIT 2");
+// Fetch last 3 inserted terms (ordered by id DESC)
+$terms_result = $conn->query("SELECT * FROM terms ORDER BY id DESC LIMIT 3");
 $recent_terms = [];
 while ($t = $terms_result->fetch_assoc()) {
     $recent_terms[] = $t;
@@ -372,40 +372,58 @@ $is_admin_user = strcasecmp($current_username, 'admin') === 0;
             </div>
             <?php endif; ?>
 
-            <?php if (!empty($recent_terms)): ?>
+            <?php
+            $terms_slot_count = 3;
+            $terms_padding = max(0, $terms_slot_count - count($recent_terms));
+            ?>
             <!-- Recent Terms -->
             <div class="row mt-4">
                 <div class="col-12">
                     <div class="quick-links-section">
                         <h3><i class="bi bi-calendar-range"></i> Terms</h3>
-                        <div class="table-responsive">
-                            <table class="table table-bordered table-striped mb-0">
-                                <thead>
-                                    <tr>
-                                        <th class="text-center">Academic Year</th>
-                                        <th class="text-center">Term</th>
-                                        <th class="text-center">Sem</th>
-                                        <th class="text-center">Start Date</th>
-                                        <th class="text-center">End Date</th>
-                                    </tr>
-                                </thead>
-                                <tbody>
-                                    <?php foreach ($recent_terms as $t): ?>
-                                    <tr>
-                                        <td class="text-center"><?= htmlspecialchars($t['academic_year']) ?></td>
-                                        <td class="text-center"><?= htmlspecialchars($t['term']) ?></td>
-                                        <td class="text-center"><?= htmlspecialchars($t['sem']) ?></td>
-                                        <td class="text-center"><?= htmlspecialchars($t['start_date']) ?></td>
-                                        <td class="text-center"><?= htmlspecialchars($t['end_date']) ?></td>
-                                    </tr>
-                                    <?php endforeach; ?>
-                                </tbody>
-                            </table>
-                        </div>
+                        <?php if (empty($recent_terms)): ?>
+                            <div class="alert alert-info mb-0">
+                                <i class="bi bi-info-circle me-1"></i>
+                                No terms have been added yet. Use <a href="manageterm.php" class="alert-link">Manage &rsaquo; Term</a> to add at least 3 terms.
+                            </div>
+                        <?php else: ?>
+                            <div class="table-responsive">
+                                <table class="table table-bordered table-striped mb-0">
+                                    <thead>
+                                        <tr>
+                                            <th class="text-center">Academic Year</th>
+                                            <th class="text-center">Term</th>
+                                            <th class="text-center">Sem</th>
+                                            <th class="text-center">Start Date</th>
+                                            <th class="text-center">End Date</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        <?php foreach ($recent_terms as $t): ?>
+                                        <tr>
+                                            <td class="text-center"><?= htmlspecialchars($t['academic_year']) ?></td>
+                                            <td class="text-center"><?= htmlspecialchars($t['term']) ?></td>
+                                            <td class="text-center"><?= htmlspecialchars($t['sem']) ?></td>
+                                            <td class="text-center"><?= htmlspecialchars($t['start_date']) ?></td>
+                                            <td class="text-center"><?= htmlspecialchars($t['end_date']) ?></td>
+                                        </tr>
+                                        <?php endforeach; ?>
+                                        <?php for ($i = 0; $i < $terms_padding; $i++): ?>
+                                        <tr class="text-muted">
+                                            <td class="text-center">&mdash;</td>
+                                            <td class="text-center">&mdash;</td>
+                                            <td class="text-center">&mdash;</td>
+                                            <td class="text-center">&mdash;</td>
+                                            <td class="text-center">&mdash;</td>
+                                        </tr>
+                                        <?php endfor; ?>
+                                    </tbody>
+                                </table>
+                            </div>
+                        <?php endif; ?>
                     </div>
                 </div>
             </div>
-            <?php endif; ?>
 
         </div>
     </div>
