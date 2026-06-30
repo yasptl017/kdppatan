@@ -441,9 +441,6 @@ if (!empty($batch_enrollments)) {
                             </div>
 
                             <div class="pc-used-section mt-4 p-3" id="pc-used-container">
-                                <h5 class="mb-3">
-                                    <i class="bi bi-pc-display me-2 text-primary"></i>Total PC Used in Lab
-                                </h5>
                                 <div class="row g-3 align-items-end">
                                     <div class="col-12 col-md-6">
                                         <label for="totalPcUsedInput" class="form-label fw-semibold">
