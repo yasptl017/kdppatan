@@ -150,9 +150,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['submit_attendance']))
         }
     }
 
-    // Backward compatibility for old single-value form.
-    if (empty($totalPcUsedMap) && count($selected_labs) === 1 && isset($_POST['totalPcUsed'])) {
-        $totalPcUsedMap[$selected_labs[0]] = max(0, (int)$_POST['totalPcUsed']);
+    // Backward compatibility: single "totalPcUsed" textbox (covers all selected labs).
+    if (empty($totalPcUsedMap) && isset($_POST['totalPcUsed']) && $_POST['totalPcUsed'] !== '') {
+        $single_pc = max(0, (int)$_POST['totalPcUsed']);
+        foreach ($selected_labs as $lab_name) {
+            $totalPcUsedMap[$lab_name] = $single_pc;
+        }
     }
 
     if (empty($selected_batches) || count($batch_lab_map) !== count($selected_batches)) {
@@ -441,27 +444,24 @@ if (!empty($batch_enrollments)) {
                                 <h5 class="mb-3">
                                     <i class="bi bi-pc-display me-2 text-primary"></i>Total PC Used in Lab
                                 </h5>
-                                <div class="row g-3">
-                                    <?php foreach ($selected_labs as $lab_name): ?>
-                                        <div class="col-12 col-md-6">
-                                            <label for="totalPcUsedByLab_<?= htmlspecialchars($lab_name); ?>" class="form-label fw-semibold">
-                                                <i class="bi bi-pc-display text-primary me-1"></i>
-                                                Lab <?= htmlspecialchars($lab_name); ?>
-                                                <span class="text-muted fw-normal" style="font-size:0.78rem;">
-                                                    · half of present: <span class="pc-default-value text-primary fw-bold" data-lab="<?= htmlspecialchars($lab_name); ?>">0</span>
-                                                </span>
-                                            </label>
-                                            <input type="number"
-                                                   id="totalPcUsedByLab_<?= htmlspecialchars($lab_name); ?>"
-                                                   name="totalPcUsedByLab[<?= htmlspecialchars($lab_name); ?>]"
-                                                   class="form-control form-control-lg pc-used-input"
-                                                   data-lab="<?= htmlspecialchars($lab_name); ?>"
-                                                   value="0"
-                                                   min="0"
-                                                   style="max-width:200px;font-weight:600;">
-                                            <small class="text-muted">Auto-set to half of marked present students. You can edit manually.</small>
-                                        </div>
-                                    <?php endforeach; ?>
+                                <div class="row g-3 align-items-end">
+                                    <div class="col-12 col-md-6">
+                                        <label for="totalPcUsedInput" class="form-label fw-semibold">
+                                            <i class="bi bi-pc-display text-primary me-1"></i>
+                                            Total PC Used
+                                            <span class="text-muted fw-normal" style="font-size:0.78rem;">
+                                                · half of present: <span id="pcDefaultValue" class="text-primary fw-bold">0</span>
+                                            </span>
+                                        </label>
+                                        <input type="number"
+                                               id="totalPcUsedInput"
+                                               name="totalPcUsed"
+                                               class="form-control form-control-lg pc-used-input"
+                                               value="0"
+                                               min="0"
+                                               style="max-width:200px;font-weight:600;">
+                                        <small class="text-muted">Auto-set to half of marked present students. You can edit manually.</small>
+                                    </div>
                                 </div>
                             </div>
 
@@ -566,28 +566,18 @@ if (!empty($batch_enrollments)) {
     }
 
     function updatePcDefaultsByLab() {
-        // Count marked-present students per lab
-        const presentCountByLab = {};
-        attendanceCheckboxes.forEach(function (checkbox) {
-            if (!checkbox.checked) return;
-            const labName = checkbox.dataset.lab || '';
-            if (!labName) return;
-            presentCountByLab[labName] = (presentCountByLab[labName] || 0) + 1;
-        });
+        const presentCount = document.querySelectorAll('.attendance-checkbox:checked').length;
+        const suggested = Math.ceil(presentCount / 2);
 
-        // Update each PC input (only if user hasn't manually edited it)
         pcUsedInputs.forEach(function (input) {
-            const labName = input.dataset.lab || '';
-            const presentCount = presentCountByLab[labName] || 0;
-            const suggested = Math.ceil(presentCount / 2);
             if (!input.dataset.userEdited || input.dataset.userEdited === '0') {
                 input.value = suggested;
                 input.classList.remove('is-user-edited');
             }
-            // Always update the suggested value hint shown next to the label
-            const hint = document.querySelector('.pc-default-value[data-lab="' + labName + '"]');
-            if (hint) hint.textContent = suggested;
         });
+
+        const hint = document.getElementById('pcDefaultValue');
+        if (hint) hint.textContent = suggested;
     }
 
     // Track which fields the user has manually edited
