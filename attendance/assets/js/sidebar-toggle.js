@@ -9,26 +9,26 @@ document.addEventListener("DOMContentLoaded", () => {
   if (!appSidepanel) return;
 
   const SIDEBAR_STATE_KEY = "sidebar_collapsed";
+  let isDesktopLayout = window.innerWidth >= 1200;
 
-  // Set initial aria-expanded on the desktop toggle
   if (sidepanelTogglerDesktop) {
     sidepanelTogglerDesktop.setAttribute("aria-expanded", "true");
     sidepanelTogglerDesktop.setAttribute("role", "button");
   }
 
-  function setToggleAria(isExpanded) {
+  if (sidepanelTogglerMobile) {
+    sidepanelTogglerMobile.setAttribute("aria-expanded", "false");
+    sidepanelTogglerMobile.setAttribute("role", "button");
+  }
+
+  function setDesktopToggleAria(isExpanded) {
     if (sidepanelTogglerDesktop) {
-      sidepanelTogglerDesktop.setAttribute(
-        "aria-expanded",
-        isExpanded ? "true" : "false"
-      );
+      sidepanelTogglerDesktop.setAttribute("aria-expanded", isExpanded ? "true" : "false");
     }
   }
 
   function collapseSidebar() {
     appSidepanel.classList.add("collapsed");
-    // On desktop we don't use sidepanel-hidden (that pushes off-screen)
-    // Only remove the off-screen positioning for desktop
     if (window.innerWidth >= 1200) {
       appSidepanel.classList.remove("sidepanel-hidden");
     } else {
@@ -38,7 +38,7 @@ document.addEventListener("DOMContentLoaded", () => {
     if (appWrapper) {
       appWrapper.classList.add("sidebar-collapsed");
     }
-    setToggleAria(false);
+    setDesktopToggleAria(false);
     localStorage.setItem(SIDEBAR_STATE_KEY, "true");
   }
 
@@ -49,8 +49,33 @@ document.addEventListener("DOMContentLoaded", () => {
     if (appWrapper) {
       appWrapper.classList.remove("sidebar-collapsed");
     }
-    setToggleAria(true);
+    setDesktopToggleAria(true);
     localStorage.setItem(SIDEBAR_STATE_KEY, "false");
+  }
+
+  function openMobileSidebar() {
+    appSidepanel.classList.remove("collapsed");
+    appSidepanel.classList.remove("sidepanel-hidden");
+    appSidepanel.classList.add("sidepanel-visible");
+    if (appWrapper) {
+      appWrapper.classList.remove("sidebar-collapsed");
+    }
+    if (sidepanelTogglerMobile) {
+      sidepanelTogglerMobile.setAttribute("aria-expanded", "true");
+    }
+  }
+
+  function closeMobileSidebar() {
+    appSidepanel.classList.remove("collapsed");
+    appSidepanel.classList.remove("show");
+    appSidepanel.classList.add("sidepanel-hidden");
+    appSidepanel.classList.remove("sidepanel-visible");
+    if (appWrapper) {
+      appWrapper.classList.remove("sidebar-collapsed");
+    }
+    if (sidepanelTogglerMobile) {
+      sidepanelTogglerMobile.setAttribute("aria-expanded", "false");
+    }
   }
 
   function toggleSidebar() {
@@ -62,7 +87,6 @@ document.addEventListener("DOMContentLoaded", () => {
   }
 
   function initSidebar() {
-    // Only apply collapsed state on desktop (≥1200px)
     if (window.innerWidth >= 1200) {
       const isCollapsed = localStorage.getItem(SIDEBAR_STATE_KEY) === "true";
       if (isCollapsed) {
@@ -71,31 +95,17 @@ document.addEventListener("DOMContentLoaded", () => {
         expandSidebar();
       }
     } else {
-      // Mobile/tablet: keep sidebar hidden by default (slide-in pattern)
-      appSidepanel.classList.remove("collapsed");
-      appSidepanel.classList.add("sidepanel-hidden");
-      appSidepanel.classList.remove("sidepanel-visible");
-      if (appWrapper) {
-        appWrapper.classList.remove("sidebar-collapsed");
-      }
-      setToggleAria(true);
+      closeMobileSidebar();
     }
   }
 
   function resetMobileStyles() {
-    appSidepanel.classList.remove("collapsed");
     appSidepanel.classList.remove("sidebar-collapsed");
-    if (appWrapper) {
-      appWrapper.classList.remove("sidebar-collapsed");
-    }
-    // On mobile, hide sidebar by default
     if (window.innerWidth < 1200) {
-      appSidepanel.classList.add("sidepanel-hidden");
-      appSidepanel.classList.remove("sidepanel-visible");
+      closeMobileSidebar();
     }
   }
 
-  // Desktop toggle button (the icon next to the hamburger)
   if (sidepanelTogglerDesktop) {
     sidepanelTogglerDesktop.addEventListener("click", (e) => {
       e.preventDefault();
@@ -103,23 +113,16 @@ document.addEventListener("DOMContentLoaded", () => {
     });
   }
 
-  // Mobile toggle button (hamburger menu)
   if (sidepanelTogglerMobile) {
     sidepanelTogglerMobile.addEventListener("click", (e) => {
       e.preventDefault();
       e.stopPropagation();
+
       if (window.innerWidth < 1200) {
-        // On mobile: explicitly open or close based on current state.
-        // We DO NOT toggle the "show" class — that's a Bootstrap collapse
-        // class with no CSS rule for sidebar visibility, and toggling it
-        // alongside the visible/hidden classes caused the sidebar to fail
-        // to open on some devices when other handlers ran in sequence.
         if (appSidepanel.classList.contains("sidepanel-visible")) {
-          appSidepanel.classList.remove("sidepanel-visible");
-          appSidepanel.classList.add("sidepanel-hidden");
+          closeMobileSidebar();
         } else {
-          appSidepanel.classList.remove("sidepanel-hidden");
-          appSidepanel.classList.add("sidepanel-visible");
+          openMobileSidebar();
         }
       } else {
         toggleSidebar();
@@ -127,36 +130,39 @@ document.addEventListener("DOMContentLoaded", () => {
     });
   }
 
-  // Close button (X icon — mobile only)
   if (sidepanelClose) {
     sidepanelClose.addEventListener("click", (e) => {
       e.preventDefault();
       if (window.innerWidth < 1200) {
-        appSidepanel.classList.remove("show");
-        appSidepanel.classList.add("sidepanel-hidden");
-        appSidepanel.classList.remove("sidepanel-visible");
+        closeMobileSidebar();
       } else {
         toggleSidebar();
       }
     });
   }
 
-  // Handle window resize — re-apply correct layout for the breakpoint
   window.addEventListener("resize", () => {
-    if (window.innerWidth < 1200) {
-      // Switch to mobile layout
-      resetMobileStyles();
-    } else {
-      // Switch to desktop layout — restore saved state
+    const nextIsDesktopLayout = window.innerWidth >= 1200;
+
+    // Mobile browsers can fire resize when only the address bar height changes.
+    // Keep the sidebar state unless the layout crosses the desktop breakpoint.
+    if (nextIsDesktopLayout === isDesktopLayout) {
+      return;
+    }
+
+    isDesktopLayout = nextIsDesktopLayout;
+
+    if (isDesktopLayout) {
       const isCollapsed = localStorage.getItem(SIDEBAR_STATE_KEY) === "true";
       if (isCollapsed) {
         collapseSidebar();
       } else {
         expandSidebar();
       }
+    } else {
+      resetMobileStyles();
     }
   });
 
-  // Initialize on page load
   initSidebar();
 });

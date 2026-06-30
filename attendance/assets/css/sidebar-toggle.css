@@ -17,6 +17,32 @@
     transition: all 0.3s ease;
 }
 
+.sidepanel-toggler {
+    position: relative;
+    z-index: 1045;
+    min-width: 44px;
+    min-height: 44px;
+    display: inline-flex !important;
+    align-items: center;
+    justify-content: center;
+    color: #667eea;
+    border-radius: 0.4rem;
+    touch-action: manipulation;
+    -webkit-tap-highlight-color: transparent;
+}
+
+.sidepanel-toggler:hover,
+.sidepanel-toggler:focus {
+    color: #5c6bc0;
+    background: rgba(102, 126, 234, 0.1);
+}
+
+@media (min-width: 1200px) {
+    .sidepanel-toggler {
+        display: none !important;
+    }
+}
+
 .sidepanel-toggler-desktop:hover {
     background: rgba(102, 126, 234, 0.1);
     color: #5c6bc0;
@@ -145,7 +171,7 @@
         top: 0;
         width: auto !important;
         height: 100%;
-        z-index: 1030;
+        z-index: 1040;
         transition: left 0.3s ease, transform 0.3s ease;
     }
 
