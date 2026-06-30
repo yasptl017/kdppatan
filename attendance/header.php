@@ -51,19 +51,16 @@ $header_enrollment_search = htmlspecialchars(trim((string)($_GET['enrollment'] ?
                         </a>
                     </div>
 
-                    <button type="button" class="search-mobile-trigger d-sm-none col" id="search-mobile-trigger" aria-label="Open search">
+                    <button type="button" class="search-mobile-trigger d-none col" id="search-mobile-trigger" aria-label="Open search">
                         <i class="search-mobile-trigger-icon fa-solid fa-magnifying-glass"></i>
                     </button>
 
-                    <div class="app-search-box col" id="app-search-box">
+                    <div class="app-search-box d-none d-sm-block col" id="app-search-box">
                         <form class="app-search-form" method="GET" action="studentAttendance.php">
                             <div class="app-search-input-wrap">
                                 <input type="text" placeholder="Search Enrollment No..." name="enrollment" value="<?= $header_enrollment_search; ?>" class="form-control search-input">
                                 <button type="submit" class="btn search-btn" aria-label="Search">
                                     <i class="fa-solid fa-magnifying-glass"></i>
-                                </button>
-                                <button type="button" class="btn search-close d-sm-none" id="search-mobile-close" aria-label="Close search">
-                                    <i class="fa-solid fa-xmark"></i>
                                 </button>
                             </div>
                         </form>
@@ -112,16 +109,23 @@ $header_enrollment_search = htmlspecialchars(trim((string)($_GET['enrollment'] ?
                 <ul class="app-menu list-unstyled accordion" id="menu-accordion">
 
                     <li class="nav-item">
-                        <a class="nav-link" href="home.php">
+                        <a class="nav-link <?= $current_page === 'home.php' ? 'active' : '' ?>" href="home.php">
                             <span class="nav-icon"><i class="bi bi-house-door"></i></span>
                             <span class="nav-link-text">Dashboard</span>
                         </a>
                     </li>
 
                     <li class="nav-item">
-                        <a class="nav-link" href="myAttendanceSelect.php">
+                        <a class="nav-link <?= in_array($current_page, ['myAttendanceSelect.php', 'myAttendance.php', 'takelecatt.php', 'takelabatt.php', 'taketutatt.php'], true) ? 'active' : '' ?>" href="myAttendanceSelect.php">
                             <span class="nav-icon"><i class="bi bi-calendar2-check"></i></span>
                             <span class="nav-link-text">My Attendance</span>
+                        </a>
+                    </li>
+
+                    <li class="nav-item">
+                        <a class="nav-link <?= $current_page === 'studentAttendance.php' ? 'active' : '' ?>" href="studentAttendance.php">
+                            <span class="nav-icon"><i class="bi bi-person-vcard"></i></span>
+                            <span class="nav-link-text">Student History</span>
                         </a>
                     </li>
 
@@ -145,21 +149,21 @@ $header_enrollment_search = htmlspecialchars(trim((string)($_GET['enrollment'] ?
                     </li>
 
                     <li class="nav-item">
-                        <a class="nav-link" href="editAttendance.php">
+                        <a class="nav-link <?= in_array($current_page, ['editAttendance.php', 'editlecatt.php', 'editlabatt.php', 'edittutatt.php'], true) ? 'active' : '' ?>" href="editAttendance.php">
                             <span class="nav-icon"><i class="bi bi-pencil-square"></i></span>
                             <span class="nav-link-text">Edit Attendance</span>
                         </a>
                     </li>
 
                     <li class="nav-item">
-                        <a class="nav-link" href="lecmuster.php">
+                        <a class="nav-link <?= in_array($current_page, ['lecmuster.php', 'attendanceSummary.php'], true) ? 'active' : '' ?>" href="lecmuster.php">
                             <span class="nav-icon"><i class="bi bi-file-earmark-spreadsheet"></i></span>
                             <span class="nav-link-text">Muster Report</span>
                         </a>
                     </li>
 
                     <li class="nav-item">
-                        <a class="nav-link" href="attendanceAnalysis.php">
+                        <a class="nav-link <?= $current_page === 'attendanceAnalysis.php' ? 'active' : '' ?>" href="attendanceAnalysis.php">
                             <span class="nav-icon"><i class="bi bi-bar-chart-line"></i></span>
                             <span class="nav-link-text">Attendance Analysis</span>
                         </a>

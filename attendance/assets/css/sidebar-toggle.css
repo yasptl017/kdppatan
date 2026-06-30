@@ -585,3 +585,8 @@ a:focus > .user-icon-holder,
         display: none !important;
     }
 }
+
+/* Sidebar nav: ensure long nav-text truncates inside collapsed mode */
+.app-sidepanel.collapsed .nav-link-text {
+    display: none;
+}
