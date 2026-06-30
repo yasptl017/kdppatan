@@ -364,6 +364,10 @@ $is_admin_user = strcasecmp($current_username, 'admin') === 0;
                         <i class="bi bi-building"></i>
                         <span>Labs</span>
                     </a>
+                    <a href="managementor.php" class="quick-link-btn">
+                        <i class="bi bi-people-fill"></i>
+                        <span>Mentor</span>
+                    </a>
                     <a href="bulkupload.php" class="quick-link-btn">
                         <i class="bi bi-upload"></i>
                         <span>Bulk Upload</span>
