@@ -88,6 +88,79 @@ $data = $_POST ?: $_GET;
 $selected_batches = normalize_batch_values($data['batch'] ?? []);
 $batch_lab_map = normalize_batch_lab_map($data['batch_lab_map'] ?? [], $selected_batches, $data['lab'] ?? '');
 
+// Fallback: when arrived via a direct link (e.g. myAttendance.php) that didn't pass
+// batch_lab_map, resolve lab numbers from the labmapping table using
+// faculty/term/sem/subject/batch/date/slot.
+if (empty($batch_lab_map) && !empty($selected_batches)) {
+    $lookup_faculty = trim((string)($data['faculty'] ?? ''));
+    $lookup_term    = trim((string)($data['term'] ?? ''));
+    $lookup_sem     = trim((string)($data['sem'] ?? ''));
+    $lookup_subject = trim((string)($data['subject'] ?? ''));
+    $lookup_date    = trim((string)($data['date'] ?? ''));
+    $lookup_slot    = trim((string)($data['slot'] ?? ''));
+
+    if ($lookup_faculty !== '' && $lookup_term !== '' && $lookup_sem !== '' && $lookup_subject !== '' && $lookup_date !== '' && $lookup_slot !== '') {
+        $dow = (int)date('w', strtotime($lookup_date));
+        $dow_str = (string)$dow;
+
+        $escaped_faculty = $conn->real_escape_string($lookup_faculty);
+        $escaped_term    = $conn->real_escape_string($lookup_term);
+        $escaped_sem     = $conn->real_escape_string($lookup_sem);
+        $escaped_subject = $conn->real_escape_string($lookup_subject);
+        $escaped_slot    = $conn->real_escape_string($lookup_slot);
+
+        $map_sql = "SELECT id, batch, labNo, slot FROM labmapping
+                    WHERE faculty = '{$escaped_faculty}'
+                      AND term = '{$escaped_term}'
+                      AND sem = '{$escaped_sem}'
+                      AND subject = '{$escaped_subject}'
+                      AND start_date <= '{$lookup_date}'
+                      AND end_date   >= '{$lookup_date}'
+                      AND FIND_IN_SET('{$dow_str}', repeat_days) > 0";
+        $map_res = $conn->query($map_sql);
+        if ($map_res) {
+            while ($mr = $map_res->fetch_assoc()) {
+                $parsed_batches_m = [];
+                $parsed_labs_m    = [];
+                $parsed_slots_m   = [];
+                $raw_batch = (string)($mr['batch'] ?? '');
+                $raw_lab   = (string)($mr['labNo'] ?? '');
+                $raw_slot  = (string)($mr['slot'] ?? '');
+
+                if ($raw_batch !== '' && $raw_batch[0] === '{') $parsed_batches_m = json_decode($raw_batch, true) ?: [];
+                if ($raw_lab   !== '' && $raw_lab[0]   === '{') $parsed_labs_m    = json_decode($raw_lab,   true) ?: [];
+                if ($raw_slot  !== '' && $raw_slot[0]  === '{') $parsed_slots_m   = json_decode($raw_slot,  true) ?: [];
+
+                $batches_day = [];
+                $labs_day    = [];
+                $slot_day    = '';
+                if (!empty($parsed_batches_m)) {
+                    $batches_day = (array)($parsed_batches_m[$dow] ?? $parsed_batches_m[$dow_str] ?? []);
+                    $labs_day    = (array)($parsed_labs_m[$dow]    ?? $parsed_labs_m[$dow_str]    ?? []);
+                    $slot_day    = (string)($parsed_slots_m[$dow]   ?? $parsed_slots_m[$dow_str]   ?? '');
+                } else {
+                    // Legacy single-batch format
+                    $batches_day = [$raw_batch];
+                    $labs_day    = [$raw_lab];
+                    $slot_day    = $raw_slot;
+                }
+
+                if ($slot_day !== '' && strcasecmp($slot_day, $lookup_slot) !== 0) {
+                    continue;
+                }
+
+                foreach ($batches_day as $bi => $bval) {
+                    $blabel = strtoupper(trim((string)$bval));
+                    $llabel = trim((string)($labs_day[$bi] ?? ''));
+                    if ($blabel !== '' && $llabel !== '' && in_array($blabel, array_map('strtoupper', $selected_batches), true)) {
+                        $batch_lab_map[$blabel] = $llabel;
+                    }
+                }
+            }
+        }
+    }
+}
+
 $data['batch'] = $selected_batches;
 $data['batch_lab_map'] = $batch_lab_map;
 unset($data['lab']);
@@ -158,8 +231,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['submit_attendance']))
         }
     }
 
-    if (empty($selected_batches) || count($batch_lab_map) !== count($selected_batches)) {
-        $attendance_error = 'Please select at least one batch and a lab number for every selected batch.';
+    if (empty($selected_batches)) {
+        $attendance_error = 'Please select at least one batch.';
+    } elseif (count($batch_lab_map) !== count($selected_batches)) {
+        $missing = array_values(array_diff(array_map('strtoupper', $selected_batches), array_keys($batch_lab_map)));
+        $attendance_error = 'Lab number is missing for batch(es): ' . implode(', ', $missing) . '. Please pick a lab for each batch.';
     } elseif (empty($selected_labs) || count($totalPcUsedMap) !== count($selected_labs)) {
         $attendance_error = 'Please enter total PC used for every selected lab.';
     } else {
@@ -433,7 +509,12 @@ if (!empty($batch_enrollments)) {
                                             <span class="d-block text-truncate" title="<?= htmlspecialchars($display_name); ?>">
                                                 <?= htmlspecialchars($display_name); ?>
                                             </span>
-                                            <span class="d-block text-muted"><?= htmlspecialchars($student_batch . ', ' . ($student_lab !== '' ? $student_lab : '-')); ?></span>
+                                            <span class="d-block text-muted">
+                                                Batch <?= htmlspecialchars($student_batch); ?>
+                                                <?php if ($student_lab !== ''): ?>
+                                                    &middot; Lab <?= htmlspecialchars($student_lab); ?>
+                                                <?php endif; ?>
+                                            </span>
                                         </div>
                                     </label>
                                 </div>

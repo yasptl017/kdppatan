@@ -157,24 +157,6 @@ $header_enrollment_search = htmlspecialchars(trim((string)($_GET['enrollment'] ?
                             <span class="nav-link-text">Attendance Analysis</span>
                         </a>
                     </li>
-                    <li class="nav-item has-submenu">
-                        <a class="nav-link submenu-toggle <?= $is_alternate_page ? 'active' : '' ?>" href="#" data-bs-toggle="collapse" data-bs-target="#submenu-2" aria-expanded="<?= $is_alternate_page ? 'true' : 'false' ?>" aria-controls="submenu-2">
-                            <span class="nav-icon"><i class="bi bi-diagram-3"></i></span>
-                            <span class="nav-link-text">Alternate</span>
-                            <span class="submenu-arrow">
-                                <svg width="1em" height="1em" viewBox="0 0 16 16" class="bi bi-chevron-down" fill="currentColor" xmlns="http://www.w3.org/2000/svg">
-                                    <path fill-rule="evenodd" d="M1.646 4.646a.5.5 0 0 1 .708 0L8 10.293l5.646-5.647a.5.5 0 0 1 .708.708l-6 6a.5.5 0 0 1-.708 0l-6-6a.5.5 0 0 1 0-.708z"/>
-                                </svg>
-                            </span>
-                        </a>
-                        <div id="submenu-2" class="collapse submenu submenu-2 <?= $is_alternate_page ? 'show' : '' ?>" data-bs-parent="#menu-accordion">
-                            <ul class="submenu-list list-unstyled">
-                                <li class="submenu-item"><a class="submenu-link <?= $current_page === 'lecAttendance.php' ? 'active' : '' ?>" href="lecAttendance.php"><i class="bi bi-journal-text me-1"></i>Lecture Attendance</a></li>
-                                <li class="submenu-item"><a class="submenu-link <?= $current_page === 'labAttendance.php' ? 'active' : '' ?>" href="labAttendance.php"><i class="bi bi-camera-video me-1"></i>Lab Attendance</a></li>
-                                <li class="submenu-item"><a class="submenu-link <?= $current_page === 'tutAttendance.php' ? 'active' : '' ?>" href="tutAttendance.php"><i class="bi bi-book me-1"></i>Tutorial Attendance</a></li>
-                            </ul>
-                        </div>
-                    </li>
                     <?php if ($is_admin_user): ?>
                     <li class="nav-item has-submenu">
                         <a class="nav-link submenu-toggle <?= $is_manage_page ? 'active' : '' ?>" href="#" data-bs-toggle="collapse" data-bs-target="#submenu-1" aria-expanded="<?= $is_manage_page ? 'true' : 'false' ?>" aria-controls="submenu-1">

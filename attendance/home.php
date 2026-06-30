@@ -9,6 +9,9 @@ $recent_terms = [];
 while ($t = $terms_result->fetch_assoc()) {
     $recent_terms[] = $t;
 }
+
+$current_username = isset($_SESSION['username']) ? trim((string)$_SESSION['username']) : (isset($_SESSION['Name']) ? trim((string)$_SESSION['Name']) : '');
+$is_admin_user = strcasecmp($current_username, 'admin') === 0;
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -333,6 +336,7 @@ while ($t = $terms_result->fetch_assoc()) {
             </div>
 
             <!-- Quick Manage Links -->
+            <?php if ($is_admin_user): ?>
             <div class="quick-links-section">
                 <h3>Quick Links</h3>
                 <div class="quick-links-grid">
@@ -366,6 +370,7 @@ while ($t = $terms_result->fetch_assoc()) {
                     </a>
                 </div>
             </div>
+            <?php endif; ?>
 
             <?php if (!empty($recent_terms)): ?>
             <!-- Recent Terms -->

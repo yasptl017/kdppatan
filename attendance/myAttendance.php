@@ -730,6 +730,7 @@ $day_names = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
                                             'batch'   => $slot['class'],
                                             'date'    => $slot['date'],
                                             'slot'    => $slot['slot'],
+                                            'batch_lab_map[' . $slot['class'] . ']' => ($slot['lab_no'] ?? ''),
                                         ]);
                                     }
                                     if ($mapping_type === 'lecture') {
