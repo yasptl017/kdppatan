@@ -31,6 +31,8 @@ $manage_pages = [
 $is_mapping_page = in_array($current_page, $mapping_pages, true);
 $is_alternate_page = in_array($current_page, $alternate_pages, true);
 $is_manage_page = in_array($current_page, $manage_pages, true);
+$current_username = isset($_SESSION['username']) ? trim((string)$_SESSION['username']) : (isset($_SESSION['Name']) ? trim((string)$_SESSION['Name']) : '');
+$is_admin_user = strcasecmp($current_username, 'admin') === 0;
 $header_enrollment_search = htmlspecialchars(trim((string)($_GET['enrollment'] ?? '')));
 ?>
 <header class="app-header fixed-top">
@@ -72,6 +74,9 @@ $header_enrollment_search = htmlspecialchars(trim((string)($_GET['enrollment'] ?
                             <ul class="dropdown-menu dropdown-menu-end" aria-labelledby="user-dropdown-toggle">
                                 <li><span class="dropdown-item-text text-muted small px-3 py-1">
                                     <?php echo isset($_SESSION['Name']) ? htmlspecialchars($_SESSION['Name']) : ''; ?>
+                                    <?php if ($is_admin_user): ?>
+                                        <span class="badge bg-danger ms-1" style="font-size:0.65rem;vertical-align:middle;">ADMIN</span>
+                                    <?php endif; ?>
                                 </span></li>
                                 <li><hr class="dropdown-divider"></li>
                                 <li><a class="dropdown-item" href="logout.php"><i class="bi bi-box-arrow-right me-2"></i>Log Out</a></li>
@@ -170,6 +175,7 @@ $header_enrollment_search = htmlspecialchars(trim((string)($_GET['enrollment'] ?
                             </ul>
                         </div>
                     </li>
+                    <?php if ($is_admin_user): ?>
                     <li class="nav-item has-submenu">
                         <a class="nav-link submenu-toggle <?= $is_manage_page ? 'active' : '' ?>" href="#" data-bs-toggle="collapse" data-bs-target="#submenu-1" aria-expanded="<?= $is_manage_page ? 'true' : 'false' ?>" aria-controls="submenu-1">
                             <span class="nav-icon"><i class="bi bi-gear"></i></span>
@@ -193,6 +199,7 @@ $header_enrollment_search = htmlspecialchars(trim((string)($_GET['enrollment'] ?
                             </ul>
                         </div>
                     </li>
+                    <?php endif; ?>
 
                 </ul>
             </nav>

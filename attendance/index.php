@@ -21,6 +21,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
             if ($user['status'] == 1) {
                 session_regenerate_id(true);
                 $_SESSION['Name'] = $user['Name'];
+                $_SESSION['username'] = $user['username'];
                 header("Location: home.php");
                 exit();
             } else {
