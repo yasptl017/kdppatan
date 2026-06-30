@@ -1,1 +1,32 @@
+# ─── Existing upload directories ────────────────────────────────────────────
 **/Admin/uploads/
+
+# ─── Database credentials ───────────────────────────────────────────────────
+# Local configuration overrides (drop your real credentials here)
+attendance/dbconfig.local.php
+**/Admin/dbconfig.local.php
+
+# Real config files should NOT be modified after initial commit —
+# rotate secrets on the server instead. Existing files are kept for
+# legacy local-dev setups only. Use environment variables instead.
+
+# ─── Sensitive environment / config ────────────────────────────────────────
+.env
+.env.local
+**/.env
+config.local.php
+
+# ─── Operating-system junk ──────────────────────────────────────────────────
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# ─── IDE / editor temp files ────────────────────────────────────────────────
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# ─── Logs ────────────────────────────────────────────────────────────────────
+*.log
+logs/

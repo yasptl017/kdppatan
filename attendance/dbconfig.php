@@ -107,21 +107,60 @@ function attendance_is_local_runtime()
 
 mysqli_report(MYSQLI_REPORT_OFF);
 
-$attendance_db_configs = [
-    [
-        'label' => 'hosted-attendance',
-        'host' => 'localhost',
-        'dbname' => 'u262763368_kdpat',
-        'username' => 'u262763368_kdp631comp',
-        'password' => 'Lvj#S*k04!',
-    ],
+/**
+ * Database credentials are NEVER read from committed code.
+ * Resolution order:
+ *   1. Environment variables: ATTENDANCE_DB_HOST, ATTENDANCE_DB_DB, ATTENDANCE_DB_USER, ATTENDANCE_DB_PASS
+ *   2. attendance/dbconfig.local.php (gitignored — your private overrides)
+ *   3. attendance/dbconfig.php embedded fallback (legacy; shows a deprecation warning)
+ *
+ * Operators should rotate any credentials that were ever committed to source control.
+ */
+
+$attendance_db_configs = [];
+
+// 1. Environment variables take precedence
+$env_host = getenv('ATTENDANCE_DB_HOST');
+$env_db   = getenv('ATTENDANCE_DB_DB');
+$env_user = getenv('ATTENDANCE_DB_USER');
+$env_pass = getenv('ATTENDANCE_DB_PASS');
+if (!empty($env_host) || !empty($env_db) || !empty($env_user)) {
+    $attendance_db_configs[] = [
+        'label'    => 'env-vars',
+        'host'     => $env_host ?: 'localhost',
+        'dbname'   => $env_db   ?: 'kdpatt',
+        'username' => $env_user ?: 'root',
+        'password' => $env_pass !== false ? (string)$env_pass : '',
+    ];
+}
+
+// 2. Local override file (gitignored)
+$local_config_path = __DIR__ . '/dbconfig.local.php';
+if (file_exists($local_config_path)) {
+    $local_configs = null;
+    require $local_config_path;
+    if (!empty($local_configs) && is_array($local_configs)) {
+        foreach ($local_configs as $cfg) {
+            $attendance_db_configs[] = $cfg;
+        }
+    }
+}
+
+// 3. Legacy fallback — credentials intentionally emptied.
+//    For real credentials, supply env vars or attendance/dbconfig.local.php.
+$attendance_db_configs[] = [
+    'label'    => 'legacy-attendance',
+    'host'     => '',
+    'dbname'   => '',
+    'username' => '',
+    'password' => '',
 ];
 
 if (attendance_is_local_runtime()) {
     $attendance_db_configs[] = [
-        'label' => 'local-attendance',
-        'host' => 'localhost',
-        'dbname' => 'kdpatt',
+        'label'    => 'local-attendance',
+        'host'     => 'localhost',
+        'dbname'   => 'kdpatt',
         'username' => 'root',
         'password' => '',
     ];
