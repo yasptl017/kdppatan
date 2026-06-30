@@ -91,7 +91,7 @@ $header_enrollment_search = htmlspecialchars(trim((string)($_GET['enrollment'] ?
 
             <div class="app-branding">
                 <a class="app-logo" href="home.php">
-                    <img class="logo-icon me-2" src="assets/images/app-logo.svg" alt="KDP-MIS Logo">
+                    <img class="logo-icon me-2" src="assets/images/app-logo.png" alt="KDP-MIS Logo">
                     <span class="logo-text">KDP-MIS</span>
                 </a>
             </div>

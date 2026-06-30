@@ -147,6 +147,71 @@ $conn->close();
             color: #3949ab;
             letter-spacing: -0.5px;
         }
+
+        /* Left branding panel: large logo + KDP, PATAN */
+        .branding-logo {
+            display: flex;
+            justify-content: center;
+        }
+        .branding-logo-img {
+            width: 160px;
+            height: 160px;
+            object-fit: contain;
+            background: #ffffff;
+            border-radius: 50%;
+            padding: 8px;
+            box-shadow: 0 12px 32px rgba(0, 0, 0, 0.18);
+        }
+        .branding-name {
+            font-size: 2.4rem;
+            font-weight: 800;
+            color: #fff;
+            letter-spacing: 1px;
+            text-align: center;
+            margin-top: 0.25rem;
+        }
+        .branding-sub {
+            font-size: 1.1rem;
+            color: rgba(255, 255, 255, 0.92);
+            text-align: center;
+            margin-top: 0.35rem;
+            font-weight: 500;
+        }
+
+        /* Right login panel: medium logo + name + dept */
+        .login-brand {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            text-align: center;
+            gap: 0.75rem;
+            margin-bottom: 2rem;
+        }
+        .login-brand-img {
+            width: 96px;
+            height: 96px;
+            object-fit: contain;
+            background: #ffffff;
+            border-radius: 50%;
+            padding: 6px;
+            box-shadow: 0 6px 16px rgba(57, 73, 171, 0.18);
+        }
+        .login-brand-text {
+            display: flex;
+            flex-direction: column;
+            gap: 0.2rem;
+        }
+        .login-brand-title {
+            font-size: 1.5rem;
+            font-weight: 800;
+            color: #3949ab;
+            letter-spacing: 0.5px;
+        }
+        .login-brand-subtitle {
+            font-size: 0.85rem;
+            color: #64748b;
+            font-weight: 600;
+        }
         .login-card {
             background: #fff;
             border-radius: 1rem;
@@ -199,6 +264,16 @@ $conn->close();
             .login-left { display: none; }
             .login-right { padding: 1.5rem 1rem; background: #f8f9fc; min-height: 100vh; }
             .login-card { padding: 1.5rem; }
+            .branding-name { font-size: 2rem; }
+            .branding-sub { font-size: 1rem; }
+            .login-brand-img { width: 84px; height: 84px; }
+            .login-brand-title { font-size: 1.3rem; }
+        }
+
+        @media (min-width: 768px) and (max-width: 991.98px) {
+            .branding-logo-img { width: 130px; height: 130px; }
+            .branding-name { font-size: 2rem; }
+            .branding-sub { font-size: 1rem; }
         }
     </style>
 </head>
@@ -207,12 +282,12 @@ $conn->close();
         <!-- Left branding panel -->
         <div class="col-md-6 login-left d-none d-md-flex">
             <div class="login-left-content">
-                <div class="mb-4">
-                    <img src="assets/images/app-logo.svg" alt="Logo" style="width:72px;height:72px;filter:brightness(0) invert(1);opacity:0.9;">
+                <div class="branding-logo mb-3">
+                    <img src="assets/images/app-logo.png" alt="KDP Patan Logo" class="branding-logo-img">
                 </div>
-                <div class="school-name">K.D. Polytechnic, Patan</div>
-                <div class="school-dept">Department of Computer Engineering</div>
-                <hr style="border-color:rgba(255,255,255,0.25);margin:1.5rem 0;">
+                <div class="branding-name">KDP, PATAN</div>
+                <div class="branding-sub">Department of Computer Engineering</div>
+                <hr style="border-color:rgba(255,255,255,0.25);margin:1.5rem 0;width:80%;">
                 <p style="font-size:1.1rem;font-weight:600;margin-bottom:1rem;">Attendance Management System</p>
                 <ul class="feature-list">
                     <li>Track Lecture, Lab &amp; Tutorial Attendance</li>
@@ -226,9 +301,12 @@ $conn->close();
         <!-- Right login form -->
         <div class="col-12 col-md-6 login-right">
             <div class="login-box">
-                <div class="login-logo">
-                    <img src="assets/images/app-logo.svg" alt="KDP-MIS">
-                    <span>KDP-MIS</span>
+                <div class="login-brand">
+                    <img src="assets/images/app-logo.png" alt="KDP Patan Logo" class="login-brand-img">
+                    <div class="login-brand-text">
+                        <div class="login-brand-title">KDP, PATAN</div>
+                        <div class="login-brand-subtitle">Department of Computer Engineering</div>
+                    </div>
                 </div>
 
                 <div class="login-card">
