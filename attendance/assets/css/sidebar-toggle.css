@@ -254,30 +254,82 @@
 }
 
 /* ========================================
+   Sidebar header row (branding + close button)
+   ======================================== */
+.sidepanel-header {
+    position: relative;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.5rem;
+    padding: 0.85rem 1rem;
+    border-bottom: 1px solid rgba(0, 0, 0, 0.06);
+}
+
+.sidepanel-header .app-branding {
+    flex: 1;
+    min-width: 0;
+    height: auto;
+    padding: 0;
+    margin: 0;
+}
+
+.sidepanel-header .app-branding .app-logo {
+    align-items: center;
+    display: flex;
+}
+
+/* ========================================
+   DESKTOP collapsed header adjustments
+   ======================================== */
+.app-sidepanel.collapsed .sidepanel-header {
+    justify-content: center;
+    padding: 0.85rem 0.5rem;
+}
+
+.app-sidepanel.collapsed .sidepanel-header .sidepanel-close {
+    display: none !important;
+}
+
+/* ========================================
    Close button styles (mobile only)
    ======================================== */
 .sidepanel-close {
-    position: absolute;
-    top: 0.5rem;
-    right: 0.5rem;
-    width: 32px;
-    height: 32px;
-    display: flex;
+    flex-shrink: 0;
+    width: 36px;
+    height: 36px;
+    display: inline-flex;
     align-items: center;
     justify-content: center;
-    text-decoration: none;
-    font-size: 24px;
-    color: #333;
-    background: transparent;
-    border: none;
+    font-size: 1.05rem;
+    line-height: 1;
+    color: #495057;
+    background: #f1f3f5;
+    border: 1px solid rgba(0, 0, 0, 0.08);
     cursor: pointer;
-    border-radius: 0.4rem;
-    transition: all 0.3s;
+    border-radius: 50%;
+    transition: all 0.2s ease;
+    padding: 0;
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
+    /* Override portal.css legacy positioning (it placed the button OUTSIDE
+       the sidebar at right:-2rem). We want it inside the sidebar header. */
+    position: static;
+    right: auto;
+    top: auto;
+    z-index: auto;
 }
 
-.sidepanel-close:hover {
-    background: rgba(0, 0, 0, 0.1);
-    color: #000;
+.sidepanel-close:hover,
+.sidepanel-close:focus {
+    background: #e9ecef;
+    color: #dc3545;
+    border-color: rgba(220, 53, 69, 0.3);
+    outline: none;
+    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.08);
+}
+
+.sidepanel-close:active {
+    transform: scale(0.95);
 }
 
 /* ========================================

@@ -93,13 +93,16 @@ $header_enrollment_search = htmlspecialchars(trim((string)($_GET['enrollment'] ?
     <div id="app-sidepanel" class="app-sidepanel">
         <div id="sidepanel-drop" class="sidepanel-drop"></div>
         <div class="sidepanel-inner d-flex flex-column">
-            <a href="#" id="sidepanel-close" class="sidepanel-close d-xl-none">&times;</a>
-
-            <div class="app-branding">
-                <a class="app-logo" href="home.php">
-                    <img class="logo-icon me-2" src="assets/images/app-logo.png" alt="KDP-MIS Logo">
-                    <span class="logo-text">KDP-MIS</span>
-                </a>
+            <div class="sidepanel-header">
+                <div class="app-branding">
+                    <a class="app-logo" href="home.php">
+                        <img class="logo-icon me-2" src="assets/images/app-logo.png" alt="KDP, PATAN Logo">
+                        <span class="logo-text">KDP, PATAN</span>
+                    </a>
+                </div>
+                <button type="button" id="sidepanel-close" class="sidepanel-close d-xl-none" aria-label="Close sidebar" title="Close">
+                    <i class="bi bi-x-lg" aria-hidden="true"></i>
+                </button>
             </div>
 
             <nav id="app-nav-main" class="app-nav app-nav-main flex-grow-1">
