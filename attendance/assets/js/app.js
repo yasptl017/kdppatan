@@ -41,23 +41,62 @@ if (sidePanelDrop) {
 
 
 /* ====== Mobile search ======= */
-const searchMobileTrigger = document.querySelector('.search-mobile-trigger');
-const searchBox = document.querySelector('.app-search-box');
+const searchMobileTrigger = document.getElementById('search-mobile-trigger');
+const searchMobileClose = document.getElementById('search-mobile-close');
+const searchMobileTriggerIcon = document.querySelector('.search-mobile-trigger-icon');
+const searchBox = document.getElementById('app-search-box');
+const searchInput = searchBox ? searchBox.querySelector('.search-input') : null;
 
-searchMobileTrigger.addEventListener('click', () => {
+function openMobileSearch() {
+    if (!searchBox) return;
+    searchBox.classList.add('is-visible');
+    if (searchMobileTriggerIcon) {
+        searchMobileTriggerIcon.classList.remove('fa-magnifying-glass');
+        searchMobileTriggerIcon.classList.add('fa-xmark');
+    }
+    // Focus the input slightly after the overlay becomes visible so the
+    // virtual keyboard doesn't double-trigger the layout reflow.
+    setTimeout(() => {
+        if (searchInput) searchInput.focus({ preventScroll: true });
+    }, 50);
+}
 
-	searchBox.classList.toggle('is-visible');
-	
-	let searchMobileTriggerIcon = document.querySelector('.search-mobile-trigger-icon');
-	
-	if(searchMobileTriggerIcon.classList.contains('fa-magnifying-glass')) {
-		searchMobileTriggerIcon.classList.remove('fa-magnifying-glass');
-		searchMobileTriggerIcon.classList.add('fa-xmark');
-	} else {
-		searchMobileTriggerIcon.classList.remove('fa-xmark');
-		searchMobileTriggerIcon.classList.add('fa-magnifying-glass');
-	}
-	
-		
-	
-});
+function closeMobileSearch() {
+    if (!searchBox) return;
+    searchBox.classList.remove('is-visible');
+    if (searchInput) searchInput.blur();
+    if (searchMobileTriggerIcon) {
+        searchMobileTriggerIcon.classList.remove('fa-xmark');
+        searchMobileTriggerIcon.classList.add('fa-magnifying-glass');
+    }
+}
+
+if (searchMobileTrigger) {
+    searchMobileTrigger.addEventListener('click', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        if (searchBox && searchBox.classList.contains('is-visible')) {
+            closeMobileSearch();
+        } else {
+            openMobileSearch();
+        }
+    });
+}
+
+if (searchMobileClose) {
+    searchMobileClose.addEventListener('click', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        closeMobileSearch();
+    });
+}
+
+// Stop keyboard events inside the search overlay from bubbling into the
+// document. Some mobile browsers deliver keypress events to ancestor elements
+// (including the sidebar toggle region) which was causing the sidebar to
+// open while the user typed in the search input.
+if (searchBox) {
+    ['keydown', 'keyup', 'keypress', 'input'].forEach((evt) => {
+        searchBox.addEventListener(evt, (e) => e.stopPropagation(), true);
+    });
+}

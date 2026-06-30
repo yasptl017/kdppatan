@@ -51,15 +51,20 @@ $header_enrollment_search = htmlspecialchars(trim((string)($_GET['enrollment'] ?
                         </a>
                     </div>
 
-                    <div class="search-mobile-trigger d-sm-none col">
+                    <button type="button" class="search-mobile-trigger d-sm-none col" id="search-mobile-trigger" aria-label="Open search">
                         <i class="search-mobile-trigger-icon fa-solid fa-magnifying-glass"></i>
-                    </div>
+                    </button>
 
-                    <div class="app-search-box col">
-                        <form class="app-search-form" method="GET" action="studentAttendance.php" style="display: flex; align-items: center; gap: 0.5rem;">
-                            <div style="flex: 1; position: relative;">
-                                <input type="text" placeholder="Search Enrollment No..." name="enrollment" value="<?= $header_enrollment_search; ?>" class="form-control search-input" style="padding-right: 2.75rem; padding-left: 0.9rem; height: 40px; border-radius: 0.35rem; border: 1px solid #ddd;">
-                                <button type="submit" class="btn search-btn btn-primary" style="position: absolute; right: 2px; top: 50%; transform: translateY(-50%); padding: 0.4rem 0.6rem; border-radius: 0.25rem; border: none; background: transparent; color: #667eea; cursor: pointer; font-size: 0.95rem;" value="Search"><i class="fa-solid fa-magnifying-glass"></i></button>
+                    <div class="app-search-box col" id="app-search-box">
+                        <form class="app-search-form" method="GET" action="studentAttendance.php">
+                            <div class="app-search-input-wrap">
+                                <input type="text" placeholder="Search Enrollment No..." name="enrollment" value="<?= $header_enrollment_search; ?>" class="form-control search-input">
+                                <button type="submit" class="btn search-btn" aria-label="Search">
+                                    <i class="fa-solid fa-magnifying-glass"></i>
+                                </button>
+                                <button type="button" class="btn search-close d-sm-none" id="search-mobile-close" aria-label="Close search">
+                                    <i class="fa-solid fa-xmark"></i>
+                                </button>
                             </div>
                         </form>
                     </div>
@@ -70,20 +75,16 @@ $header_enrollment_search = htmlspecialchars(trim((string)($_GET['enrollment'] ?
                                 <span class="user-icon-holder" aria-hidden="true">
                                     <i class="bi bi-person-fill"></i>
                                 </span>
-                                <span class="d-none d-md-inline text-truncate" style="max-width:120px;font-size:0.875rem;font-weight:500;">
+                                <span class="d-none d-md-inline text-truncate user-name-label">
                                     <?php echo isset($_SESSION['Name']) ? htmlspecialchars($_SESSION['Name']) : 'User'; ?>
                                 </span>
                             </a>
-                            <ul class="dropdown-menu dropdown-menu-end" aria-labelledby="user-dropdown-toggle">
-                                <li><span class="dropdown-item-text text-muted small px-3 py-1">
-                                    <?php echo isset($_SESSION['Name']) ? htmlspecialchars($_SESSION['Name']) : ''; ?>
-                                    <?php if ($is_admin_user): ?>
-                                        <span class="badge bg-danger ms-1" style="font-size:0.65rem;vertical-align:middle;">ADMIN</span>
-                                    <?php endif; ?>
-                                </span></li>
-                                <li><hr class="dropdown-divider"></li>
-                                <li><a class="dropdown-item" href="logout.php"><i class="bi bi-box-arrow-right me-2"></i>Log Out</a></li>
-                            </ul>
+                            <div class="dropdown-menu dropdown-menu-end user-profile-dropdown" aria-labelledby="user-dropdown-toggle">
+                                <a class="dropdown-item user-profile-action" href="logout.php">
+                                    <i class="bi bi-box-arrow-right me-2"></i>
+                                    <span>Log Out</span>
+                                </a>
+                            </div>
                         </div>
                     </div>
 
