@@ -67,7 +67,9 @@ $header_enrollment_search = htmlspecialchars(trim((string)($_GET['enrollment'] ?
                     <div class="app-utilities col-auto">
                         <div class="app-utility-item app-user-dropdown dropdown">
                             <a class="dropdown-toggle d-flex align-items-center gap-2" id="user-dropdown-toggle" data-bs-toggle="dropdown" href="#" role="button" aria-expanded="false">
-                                <img src="assets/images/user.png" alt="user profile" style="width:32px;height:32px;border-radius:50%;object-fit:cover;">
+                                <span class="user-icon-holder" aria-hidden="true">
+                                    <i class="bi bi-person-fill"></i>
+                                </span>
                                 <span class="d-none d-md-inline text-truncate" style="max-width:120px;font-size:0.875rem;font-weight:500;">
                                     <?php echo isset($_SESSION['Name']) ? htmlspecialchars($_SESSION['Name']) : 'User'; ?>
                                 </span>

@@ -254,6 +254,31 @@
 }
 
 /* ========================================
+   User icon-holder in top nav (replaces user photo)
+   ======================================== */
+.user-icon-holder {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 36px;
+    height: 36px;
+    border-radius: 50%;
+    background: #edfdf6;
+    color: #15a362;
+    font-size: 1.1rem;
+    line-height: 1;
+    border: 1px solid rgba(21, 163, 98, 0.15);
+    transition: background 0.2s ease, color 0.2s ease;
+}
+
+a:hover > .user-icon-holder,
+a:focus > .user-icon-holder,
+.show > a > .user-icon-holder {
+    background: #15a362;
+    color: #fff;
+}
+
+/* ========================================
    Sidebar header row (branding + close button)
    ======================================== */
 .sidepanel-header {
