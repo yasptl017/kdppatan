@@ -107,10 +107,20 @@ document.addEventListener("DOMContentLoaded", () => {
   if (sidepanelTogglerMobile) {
     sidepanelTogglerMobile.addEventListener("click", (e) => {
       e.preventDefault();
+      e.stopPropagation();
       if (window.innerWidth < 1200) {
-        appSidepanel.classList.toggle("show");
-        appSidepanel.classList.toggle("sidepanel-visible");
-        appSidepanel.classList.toggle("sidepanel-hidden");
+        // On mobile: explicitly open or close based on current state.
+        // We DO NOT toggle the "show" class — that's a Bootstrap collapse
+        // class with no CSS rule for sidebar visibility, and toggling it
+        // alongside the visible/hidden classes caused the sidebar to fail
+        // to open on some devices when other handlers ran in sequence.
+        if (appSidepanel.classList.contains("sidepanel-visible")) {
+          appSidepanel.classList.remove("sidepanel-visible");
+          appSidepanel.classList.add("sidepanel-hidden");
+        } else {
+          appSidepanel.classList.remove("sidepanel-hidden");
+          appSidepanel.classList.add("sidepanel-visible");
+        }
       } else {
         toggleSidebar();
       }
