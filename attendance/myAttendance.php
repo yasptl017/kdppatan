@@ -208,6 +208,25 @@ if ($filter_term !== '') {
                         'skipped'      => isset($exceptions_set[$mapping_type . ':' . (int)$m['id'] . '|' . $date_str]),
                     ];
                 }
+            } elseif ($mapping_type === 'tutorial' && $parsed_batches !== null && is_array($parsed_batches[$dow] ?? null)) {
+                $batches_day = (array)($parsed_batches[$dow] ?? $parsed_batches[$dow_str] ?? []);
+                foreach ($batches_day as $batch_val) {
+                    $batch_label = (string)$batch_val;
+                    if ($batch_label === '') continue;
+                    $slot_list[] = [
+                        'mapping_id'   => (int)$m['id'],
+                        'mapping_type' => $mapping_type,
+                        'date'         => $date_str,
+                        'faculty'      => (string)$m['faculty'],
+                        'term'         => $mapping_term,
+                        'sem'          => (string)$m['sem'],
+                        'subject'      => (string)$m['subject'],
+                        'class'        => $batch_label,
+                        'slot'         => $slot_value,
+                        'lab_no'       => '',
+                        'skipped'      => isset($exceptions_set[$mapping_type . ':' . (int)$m['id'] . '|' . $date_str]),
+                    ];
+                }
             } else {
                 $slot_list[] = [
                     'mapping_id'   => (int)$m['id'],

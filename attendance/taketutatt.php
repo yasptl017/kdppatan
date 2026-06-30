@@ -61,6 +61,67 @@ function normalize_batch_values($batch_input) {
 
 $data = $_POST ?: $_GET;
 $selected_tut_batches = normalize_batch_values($data['tutBatch'] ?? ($data['batch'] ?? []));
+
+// Fallback: when arrived via direct link (e.g. myAttendance.php) without tutBatch,
+// look it up from the tutmapping table using faculty/term/sem/subject/date/slot.
+if (empty($selected_tut_batches)) {
+    $lookup_faculty = trim((string)($data['faculty'] ?? ''));
+    $lookup_term    = trim((string)($data['term'] ?? ''));
+    $lookup_sem     = trim((string)($data['sem'] ?? ''));
+    $lookup_subject = trim((string)($data['subject'] ?? ''));
+    $lookup_date    = trim((string)($data['date'] ?? ''));
+    $lookup_slot    = trim((string)($data['slot'] ?? ''));
+    $lookup_class   = trim((string)($data['class'] ?? ''));
+
+    if ($lookup_faculty !== '' && $lookup_term !== '' && $lookup_sem !== '' && $lookup_subject !== '' && $lookup_date !== '' && $lookup_slot !== '') {
+        $dow = (int)date('w', strtotime($lookup_date));
+        $dow_str = (string)$dow;
+
+        $escaped_faculty = $conn->real_escape_string($lookup_faculty);
+        $escaped_term    = $conn->real_escape_string($lookup_term);
+        $escaped_sem     = $conn->real_escape_string($lookup_sem);
+        $escaped_subject = $conn->real_escape_string($lookup_subject);
+
+        $map_sql = "SELECT id, tutBatch, slot FROM tutmapping
+                    WHERE faculty = '{$escaped_faculty}'
+                      AND term = '{$escaped_term}'
+                      AND sem = '{$escaped_sem}'
+                      AND subject = '{$escaped_subject}'
+                      AND start_date <= '{$lookup_date}'
+                      AND end_date   >= '{$lookup_date}'
+                      AND FIND_IN_SET('{$dow_str}', repeat_days) > 0";
+        $map_res = $conn->query($map_sql);
+        if ($map_res) {
+            while ($mr = $map_res->fetch_assoc()) {
+                $raw_batch = (string)($mr['tutBatch'] ?? '');
+                $raw_slot  = (string)($mr['slot'] ?? '');
+                $parsed_batches_m = [];
+                $parsed_slots_m   = [];
+                if ($raw_batch !== '' && $raw_batch[0] === '{') $parsed_batches_m = json_decode($raw_batch, true) ?: [];
+                if ($raw_slot  !== '' && $raw_slot[0]  === '{') $parsed_slots_m   = json_decode($raw_slot,  true) ?: [];
+
+                if (!empty($parsed_batches_m)) {
+                    $batches_day = (array)($parsed_batches_m[$dow] ?? $parsed_batches_m[$dow_str] ?? []);
+                    $slot_day    = (string)($parsed_slots_m[$dow]   ?? $parsed_slots_m[$dow_str]   ?? '');
+                } else {
+                    $batches_day = [$raw_batch];
+                    $slot_day    = $raw_slot;
+                }
+
+                if ($slot_day !== '' && strcasecmp($slot_day, $lookup_slot) !== 0) continue;
+
+                foreach ($batches_day as $bv) {
+                    $blabel = trim((string)$bv);
+                    if ($blabel !== '') {
+                        $selected_tut_batches[] = $blabel;
+                    }
+                }
+            }
+            $selected_tut_batches = array_values(array_unique($selected_tut_batches));
+        }
+    }
+}
+
 $selected_tut_batches_normalized = array_values(array_unique(array_map(function ($batch_name) {
     return strtoupper(trim((string)$batch_name));
 }, $selected_tut_batches)));

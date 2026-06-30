@@ -32,7 +32,7 @@ $conn->query("CREATE TABLE IF NOT EXISTS `tutmapping` (
     `term`        VARCHAR(20)  NOT NULL,
     `sem`         VARCHAR(10)  NOT NULL,
     `subject`     VARCHAR(100) NOT NULL,
-    `tutBatch`    VARCHAR(30)  NOT NULL,
+    `tutBatch`    TEXT         NOT NULL COMMENT 'JSON object: day-num key to array of batch names, or legacy single value',
     `slot`        TEXT         NOT NULL,
     `start_date`  DATE         NOT NULL,
     `end_date`    DATE         NOT NULL,
@@ -41,8 +41,9 @@ $conn->query("CREATE TABLE IF NOT EXISTS `tutmapping` (
     PRIMARY KEY (`id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
 
-// Ensure slot column is TEXT (not VARCHAR) to hold JSON strings
+// Ensure columns are TEXT to hold JSON
 $conn->query("ALTER TABLE tutmapping MODIFY slot TEXT NOT NULL");
+$conn->query("ALTER TABLE tutmapping MODIFY tutBatch TEXT NOT NULL");
 
 $success_msg = '';
 $error_msg = '';
@@ -119,42 +120,63 @@ $form_defaults = [
     'start_date' => $default_date,
     'end_date' => $default_date,
     'repeat_days' => [],
-    'day_slots' => [],
+    'day_data' => [], // [dayNum => ['slot' => '', 'batches' => ['batch1', 'batch2']]]
 ];
 
 $form_values = $form_defaults;
 if ($editing_mapping) {
-    $stored_slot = (string)$editing_mapping['slot'];
+    $stored_slot  = (string)$editing_mapping['slot'];
+    $stored_batch = (string)$editing_mapping['tutBatch'];
     $repeat_days = array_values(array_unique(array_filter(
         array_map('intval', explode(',', (string)$editing_mapping['repeat_days'])),
         static fn($day) => $day >= 0 && $day <= 6
     )));
-    $day_slots = [];
-    if ($stored_slot !== '' && $stored_slot[0] === '{') {
-        $parsed = json_decode($stored_slot, true);
-        if (is_array($parsed)) {
-            foreach ($parsed as $k => $v) {
-                $day_slots[(int)$k] = $v;
+    $day_data = [];
+    $has_json_slot  = ($stored_slot  !== '' && $stored_slot[0]  === '{');
+    $has_json_batch = ($stored_batch !== '' && $stored_batch[0] === '{');
+    $parsed_slots  = $has_json_slot  ? (json_decode($stored_slot,  true) ?: []) : [];
+    $parsed_batches = $has_json_batch ? (json_decode($stored_batch, true) ?: []) : [];
+
+    if ($has_json_slot) {
+        foreach ($parsed_slots as $k => $v) {
+            $dk = (int)$k;
+            $batches_for_day = [];
+            $raw = $parsed_batches[$k] ?? $parsed_batches[$dk] ?? $stored_batch;
+            if (is_array($raw)) {
+                foreach ($raw as $bv) {
+                    if ((string)$bv !== '') $batches_for_day[] = (string)$bv;
+                }
+            } elseif ((string)$raw !== '') {
+                $batches_for_day[] = (string)$raw;
             }
-            $repeat_days = array_keys($day_slots);
-            sort($repeat_days);
+            $day_data[$dk] = ['slot' => (string)$v, 'batches' => $batches_for_day];
         }
-    } elseif ($stored_slot !== '') {
+    } else {
+        // Legacy: single slot/batch for all repeat days
         foreach ($repeat_days as $d) {
-            $day_slots[(string)$d] = $stored_slot;
+            $day_data[$d] = [
+                'slot'    => $stored_slot,
+                'batches' => $stored_batch !== '' ? [$stored_batch] : [],
+            ];
         }
     }
+    $repeat_days_final = array_values(array_unique(array_filter(
+        array_map('intval', array_keys($day_data)),
+        static fn($day) => $day >= 0 && $day <= 6
+    )));
+    sort($repeat_days_final);
+
     $form_values = [
         'faculty' => (string)$editing_mapping['faculty'],
         'term' => (string)$editing_mapping['term'],
         'sem' => (string)$editing_mapping['sem'],
         'subject' => (string)$editing_mapping['subject'],
-        'tutBatch' => (string)$editing_mapping['tutBatch'],
+        'tutBatch' => $stored_batch,
         'slot' => $stored_slot,
         'start_date' => (string)$editing_mapping['start_date'],
         'end_date' => (string)$editing_mapping['end_date'],
-        'repeat_days' => $repeat_days,
-        'day_slots' => $day_slots,
+        'repeat_days' => $repeat_days_final,
+        'day_data' => $day_data,
     ];
 }
 
@@ -165,17 +187,26 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['save_mapping'])) {
     $term        = trim((string)($_POST['term'] ?? ''));
     $sem         = trim((string)($_POST['sem'] ?? ''));
     $subject     = trim((string)($_POST['subject'] ?? ''));
-    $tutBatch    = trim((string)($_POST['tutBatch'] ?? ''));
     $start_date  = trim((string)($_POST['start_date'] ?? ''));
     $end_date    = trim((string)($_POST['end_date'] ?? ''));
 
-    // Build day_slots from POST (each day has its own slot)
-    $day_slots = [];
+    // Build per-day data: each day can have a slot + multiple batches
+    $day_data = [];
     $selected_days = [];
     for ($d = 0; $d <= 6; $d++) {
         $slot_val = trim((string)($_POST['day_slot_' . $d] ?? ''));
-        if ($slot_val !== '') {
-            $day_slots[(string)$d] = $slot_val;
+        if ($slot_val === '') continue;
+        $batches_for_day = [];
+        $bi = 0;
+        while (true) {
+            if (!isset($_POST['day_batch_' . $d . '_' . $bi])) break;
+            $b = trim((string)$_POST['day_batch_' . $d . '_' . $bi]);
+            if ($b !== '') $batches_for_day[] = $b;
+            $bi++;
+            if ($bi > 20) break;
+        }
+        if (!empty($batches_for_day)) {
+            $day_data[$d] = ['slot' => $slot_val, 'batches' => $batches_for_day];
             $selected_days[] = $d;
         }
     }
@@ -184,23 +215,32 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['save_mapping'])) {
         static fn($day) => $day >= 0 && $day <= 6
     )));
     sort($repeat_days);
-    $slot_json = json_encode($day_slots, JSON_FORCE_OBJECT);
+
+    // Encode: slot={day:slot}, tutBatch={day:[batch1,batch2]}
+    $slots_for_json = [];
+    $batches_for_json = [];
+    foreach ($day_data as $d => $dd) {
+        $slots_for_json[(string)$d] = $dd['slot'];
+        $batches_for_json[(string)$d] = array_values($dd['batches']);
+    }
+    $slot_json  = json_encode($slots_for_json, JSON_FORCE_OBJECT);
+    $batch_json = json_encode($batches_for_json, JSON_FORCE_OBJECT);
 
     $form_values = [
         'faculty' => $faculty,
         'term' => $term,
         'sem' => $sem,
         'subject' => $subject,
-        'tutBatch' => $tutBatch,
+        'tutBatch' => $batch_json,
         'slot' => $slot_json,
         'start_date' => $start_date,
         'end_date' => $end_date,
         'repeat_days' => $repeat_days,
-        'day_slots' => $day_slots,
+        'day_data' => $day_data,
     ];
 
-    if ($faculty === '' || $term === '' || $sem === '' || $subject === '' || $tutBatch === '' || $start_date === '' || $end_date === '' || empty($repeat_days)) {
-        $error_msg = 'All fields are required including at least one day with a slot selected.';
+    if ($faculty === '' || $term === '' || $sem === '' || $subject === '' || $start_date === '' || $end_date === '' || empty($repeat_days)) {
+        $error_msg = 'All fields are required including at least one day with a slot and at least one tutorial batch.';
     } elseif ($end_date < $start_date) {
         $error_msg = 'End date must be on or after start date.';
     } else {
@@ -217,7 +257,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['save_mapping'])) {
                 $error_msg = 'Mapping not found for update.';
             } else {
                 $stmt = $conn->prepare("UPDATE tutmapping SET faculty = ?, term = ?, sem = ?, subject = ?, tutBatch = ?, slot = ?, start_date = ?, end_date = ?, repeat_days = ? WHERE id = ? AND faculty = ?");
-                $stmt->bind_param('sssssssssis', $faculty, $term, $sem, $subject, $tutBatch, $slot_json, $start_date, $end_date, $repeat_days_csv, $mapping_id, $logged_faculty_id);
+                $stmt->bind_param('sssssssssis', $faculty, $term, $sem, $subject, $batch_json, $slot_json, $start_date, $end_date, $repeat_days_csv, $mapping_id, $logged_faculty_id);
                 if ($stmt->execute()) {
                     $success_msg = 'Tutorial mapping updated successfully.';
                     $edit_id = $mapping_id;
@@ -228,7 +268,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['save_mapping'])) {
             }
         } else {
             $stmt = $conn->prepare("INSERT INTO tutmapping (faculty, term, sem, subject, tutBatch, slot, start_date, end_date, repeat_days) VALUES (?,?,?,?,?,?,?,?,?)");
-            $stmt->bind_param('sssssssss', $faculty, $term, $sem, $subject, $tutBatch, $slot_json, $start_date, $end_date, $repeat_days_csv);
+            $stmt->bind_param('sssssssss', $faculty, $term, $sem, $subject, $batch_json, $slot_json, $start_date, $end_date, $repeat_days_csv);
             if ($stmt->execute()) {
                 $success_msg = 'Tutorial mapping saved successfully.';
                 $form_values = $form_defaults;
@@ -373,21 +413,7 @@ $day_names = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
                                         </select>
                                     </div>
 
-                                    <div class="col-12 col-md-2">
-                                        <label class="form-label">Tutorial Batch</label>
-                                        <select name="tutBatch" class="form-control" required>
-                                            <option value="">Select Batch</option>
-                                            <?php if ($tut_batch_result): ?>
-                                                <?php $tut_batch_result->data_seek(0); while ($tut = $tut_batch_result->fetch_assoc()): ?>
-                                                    <?php $tut_batch = (string)$tut['tutBatch']; ?>
-                                                    <option value="<?= htmlspecialchars($tut_batch) ?>" <?= ($tut_batch === (string)$form_values['tutBatch']) ? 'selected' : '' ?>>
-                                                        <?= htmlspecialchars($tut_batch) ?>
-                                                    </option>
-                                                <?php endwhile; ?>
-                                            <?php endif; ?>
-                                        </select>
                                     </div>
-                                </div>
 
                                 <div class="row g-3 mb-3">
                                     <div class="col-6 col-md-2">
@@ -402,52 +428,79 @@ $day_names = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
                                 </div>
 
                                 <div class="mb-3">
-                                    <label class="form-label fw-semibold">Day &amp; Slot Schedule</label>
+                                    <label class="form-label fw-semibold">Day &amp; Schedule</label>
                                     <div class="table-responsive">
-                                        <table class="table table-bordered mb-0 day-slot-table" style="font-size:0.85rem;">
+                                        <table class="table table-bordered mb-0 day-slot-table" style="font-size:0.82rem;">
                                             <thead class="table-light">
                                                 <tr>
-                                                    <th class="text-center" style="width:80px">Day</th>
-                                                    <th class="text-center">Slot</th>
+                                                    <th class="text-center" style="width:60px">Day</th>
+                                                    <th class="text-center" style="width:130px">Slot</th>
+                                                    <th class="text-center">Tutorial Batch(es)</th>
                                                 </tr>
                                             </thead>
                                             <tbody>
                                                 <?php
                                                     $slot_list = [];
                                                     if ($slot_result) { $slot_result->data_seek(0); while ($s = $slot_result->fetch_assoc()) { $slot_list[] = (string)$s['timeslot']; } }
+                                                    $tut_batches = [];
+                                                    if ($tut_batch_result) { $tut_batch_result->data_seek(0); while ($tb = $tut_batch_result->fetch_assoc()) { $tut_batches[] = (string)$tb['tutBatch']; } }
                                                     $day_order = [1=>'Mon',2=>'Tue',3=>'Wed',4=>'Thu',5=>'Fri',6=>'Sat',0=>'Sun'];
                                                 ?>
                                                 <?php foreach ($day_order as $num => $name):
                                                     $checked = in_array((int)$num, (array)$form_values['repeat_days'], true);
-                                                    $saved_slot = (string)($form_values['day_slots'][(string)$num] ?? '');
+                                                    $dd = $form_values['day_data'][$num] ?? [];
+                                                    $saved_slot = (string)($dd['slot'] ?? '');
+                                                    $saved_batches = $dd['batches'] ?? [];
+                                                    if (empty($saved_batches) && $checked) { $saved_batches = ['']; }
                                                 ?>
-                                                <tr class="<?= $checked ? 'table-primary' : '' ?> day-slot-row">
+                                                <tr class="<?= $checked ? 'table-primary' : '' ?> day-slot-row" data-day="<?= $num ?>">
                                                     <td class="text-center align-middle">
                                                         <div class="form-check d-flex justify-content-center">
-                                                            <input type="checkbox" name="day_enable_<?= $num ?>" value="<?= $num ?>" class="form-check-input day-enable-cb" id="day-enable-<?= $num ?>" data-day="<?= $num ?>" <?= $checked ? 'checked' : '' ?>>
+                                                            <input type="checkbox" name="day_enable_<?= $num ?>" value="<?= $num ?>" class="form-check-input day-enable-cb" id="day-enable-<?= $num ?>" <?= $checked ? 'checked' : '' ?>>
                                                             <label class="form-check-label ms-1 fw-semibold" for="day-enable-<?= $num ?>"><?= $name ?></label>
                                                         </div>
                                                     </td>
                                                     <td class="align-middle">
-                                                        <select name="day_slot_<?= $num ?>" class="form-control form-control-sm day-slot-select" data-day="<?= $num ?>">
+                                                        <select name="day_slot_<?= $num ?>" class="form-control form-control-sm day-slot-select">
                                                             <option value="">—</option>
                                                             <?php foreach ($slot_list as $sn): ?>
                                                             <option value="<?= htmlspecialchars($sn) ?>" <?= ($sn === $saved_slot) ? 'selected' : '' ?>><?= htmlspecialchars($sn) ?></option>
                                                             <?php endforeach; ?>
                                                         </select>
                                                     </td>
+                                                    <td class="align-middle">
+                                                        <div class="batch-list" data-day="<?= $num ?>">
+                                                            <?php $bi = 0; foreach ($saved_batches as $sb): ?>
+                                                            <div class="batch-item d-flex gap-2 mb-1 align-items-center">
+                                                                <select name="day_batch_<?= $num ?>_<?= $bi ?>" class="form-control form-control-sm" style="max-width:180px;">
+                                                                    <option value="">Select Tutorial Batch</option>
+                                                                    <?php foreach ($tut_batches as $tbn): ?>
+                                                                    <option value="<?= htmlspecialchars($tbn) ?>" <?= ($tbn === (string)$sb) ? 'selected' : '' ?>><?= htmlspecialchars($tbn) ?></option>
+                                                                    <?php endforeach; ?>
+                                                                </select>
+                                                                <button type="button" class="btn btn-sm btn-outline-danger remove-batch" title="Remove" <?= $bi === 0 && count($saved_batches) === 1 ? 'disabled' : '' ?>><i class="bi bi-x"></i></button>
+                                                            </div>
+                                                            <?php $bi++; endforeach; ?>
+                                                            <button type="button" class="btn btn-sm btn-outline-primary mt-1 add-batch" data-day="<?= $num ?>"><i class="bi bi-plus-circle"></i> Add Tutorial Batch</button>
+                                                        </div>
+                                                    </td>
                                                 </tr>
                                                 <?php endforeach; ?>
                                             </tbody>
                                         </table>
                                     </div>
-                                    <small class="text-muted">Check a day and select its slot. Unchecked days are ignored.</small>
+                                    <small class="text-muted">Check a day, select its slot, then add one or more tutorial batches.</small>
                                 </div>
 
                                 <button type="submit" name="save_mapping" class="btn btn-primary">
                                     <i class="bi <?= $is_edit_mode ? 'bi-check2-circle' : 'bi-plus-circle' ?> me-1"></i><?= $is_edit_mode ? 'Update Tutorial Mapping' : 'Save Tutorial Mapping' ?>
                                 </button>
                             </form>
+
+                            <!-- Hidden template source for JS to clone batch options -->
+                            <div style="display:none;" aria-hidden="true">
+                                <select id="tutBatchOptionsTemplate"><?php foreach ($tut_batches as $tbn): ?><option value="<?= htmlspecialchars($tbn) ?>"><?= htmlspecialchars($tbn) ?></option><?php endforeach; ?></select>
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -495,24 +548,48 @@ $day_names = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
                                                                         array_map('intval', explode(',', (string)$m['repeat_days'])),
                                                                         static fn($day) => $day >= 0 && $day <= 6
                                                                     )));
-                                                                    $stored_slot = (string)$m['slot'];
-                                                                    $has_json = ($stored_slot !== '' && $stored_slot[0] === '{');
-                                                                    $parsed_slots = $has_json ? (json_decode($stored_slot, true) ?: []) : [];
+                                                                    $stored_slot  = (string)$m['slot'];
+                                                                    $stored_batch = (string)$m['tutBatch'];
+                                                                    $has_json_slot  = ($stored_slot  !== '' && $stored_slot[0]  === '{');
+                                                                    $has_json_batch = ($stored_batch !== '' && $stored_batch[0] === '{');
+                                                                    $parsed_slots  = $has_json_slot  ? (json_decode($stored_slot,  true) ?: []) : [];
+                                                                    $parsed_batches = $has_json_batch ? (json_decode($stored_batch, true) ?: []) : [];
+                                                                    $all_batch_labels = [];
                                                                     $day_parts = [];
                                                                     foreach ($days_arr as $d):
-                                                                        $sname = $has_json ? ($parsed_slots[$d] ?? $parsed_slots[(string)$d] ?? '') : $stored_slot;
-                                                                        if ($sname !== ''):
-                                                                            $day_parts[] = ($day_names[$d] ?? (string)$d) . ' (' . htmlspecialchars($sname) . ')';
+                                                                        $dkey = (string)$d;
+                                                                        $sn = $has_json_slot ? ($parsed_slots[$d] ?? $parsed_slots[$dkey] ?? '') : $stored_slot;
+                                                                        $ba = $has_json_batch ? ($parsed_batches[$d] ?? $parsed_batches[$dkey] ?? '') : $stored_batch;
+                                                                        if (is_array($ba)):
+                                                                            $batch_strs = [];
+                                                                            foreach ($ba as $bv):
+                                                                                $bv = (string)$bv;
+                                                                                if ($bv === '') continue;
+                                                                                $batch_strs[] = htmlspecialchars($bv);
+                                                                                $all_batch_labels[$bv] = true;
+                                                                            endforeach;
+                                                                            $batch_text = !empty($batch_strs) ? implode(', ', $batch_strs) : '';
+                                                                            $day_label = $day_names[$d] ?? (string)$d;
+                                                                            $slot_part = $sn !== '' ? htmlspecialchars($sn) . ' · ' : '';
+                                                                            $day_parts[] = $day_label . ' (' . $slot_part . $batch_text . ')';
                                                                         else:
-                                                                            $day_parts[] = $day_names[$d] ?? (string)$d;
+                                                                            if ($sn !== '' && $ba !== ''):
+                                                                                $day_parts[] = ($day_names[$d] ?? (string)$d) . ' (' . htmlspecialchars($sn) . ' · ' . htmlspecialchars($ba) . ')';
+                                                                                $all_batch_labels[$ba] = true;
+                                                                            elseif ($sn !== ''):
+                                                                                $day_parts[] = ($day_names[$d] ?? (string)$d) . ' (' . htmlspecialchars($sn) . ')';
+                                                                            else:
+                                                                                $day_parts[] = $day_names[$d] ?? (string)$d;
+                                                                            endif;
                                                                         endif;
                                                                     endforeach;
+                                                                    $batch_summary = !empty($all_batch_labels) ? implode(', ', array_keys($all_batch_labels)) : '-';
                                                                 ?>
                                                                 <tr class="<?= ($is_edit_mode && $edit_id === (int)$m['id']) ? 'table-warning' : '' ?>">
                                                                     <td><?= htmlspecialchars($m['faculty_name'] ?? $m['faculty']) ?></td>
                                                                     <td><small class="text-muted">Sem <?= htmlspecialchars($m['sem']) ?></small></td>
                                                                     <td><?= htmlspecialchars($m['subject']) ?></td>
-                                                                    <td><span class="badge bg-primary-subtle text-dark border"><?= htmlspecialchars($m['tutBatch']) ?></span></td>
+                                                                    <td><span class="badge bg-primary-subtle text-dark border"><?= htmlspecialchars($batch_summary) ?></span></td>
                                                                     <td style="white-space:nowrap;"><?= htmlspecialchars($m['start_date']) ?><br><?= htmlspecialchars($m['end_date']) ?></td>
                                                                     <td><?= implode(', ', $day_parts) ?></td>
                                                                     <td>
@@ -583,31 +660,102 @@ $day_names = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 
     populateSubjects(selectedSem || semSelect.value, selectedSubject);
 
-    // Day-slot table: toggle row highlight and auto-clear slot when unchecked
+    // Day-slot row: enable/disable controls based on checkbox
     document.querySelectorAll('.day-slot-row').forEach(function (row) {
         const cb = row.querySelector('.day-enable-cb');
-        const sel = row.querySelector('.day-slot-select');
+        const slotSel = row.querySelector('.day-slot-select');
         function syncRow() {
             row.classList.toggle('table-primary', cb.checked);
             if (!cb.checked) {
-                sel.value = '';
+                if (slotSel) slotSel.value = '';
+                row.querySelectorAll('.batch-item select').forEach(function (sel) { sel.value = ''; });
+            } else {
+                const list = row.querySelector('.batch-list');
+                if (list && list.querySelectorAll('.batch-item').length === 0) {
+                    list.querySelector('.add-batch').click();
+                }
             }
+            updateRemoveButtonsForList(row.querySelector('.batch-list'));
         }
         cb.addEventListener('change', syncRow);
-        // When slot is changed, auto-check the day if not already checked
-        sel.addEventListener('change', function () {
-            if (this.value !== '' && !cb.checked) {
-                cb.checked = true;
-                syncRow();
-            }
-        });
-        // Initial sync
-        if (cb.checked && sel.value === '') {
-            // If day is checked but no slot, auto-select first slot option if available
-            if (sel.options.length > 1) {
-                sel.selectedIndex = 1;
-            }
+        if (slotSel) {
+            slotSel.addEventListener('change', function () {
+                if (this.value !== '' && !cb.checked) {
+                    cb.checked = true;
+                    syncRow();
+                }
+            });
         }
+    });
+
+    // Add Tutorial Batch row in a day
+    document.querySelectorAll('.add-batch').forEach(function (btn) {
+        btn.addEventListener('click', function () {
+            const day = this.getAttribute('data-day');
+            const list = this.closest('.batch-list');
+            const nextIdx = list.querySelectorAll('.batch-item').length;
+            const row = list.closest('.day-slot-row');
+            if (row) {
+                const cb = row.querySelector('.day-enable-cb');
+                if (cb && !cb.checked) {
+                    cb.checked = true;
+                    row.classList.add('table-primary');
+                }
+            }
+            const tpl = document.getElementById('tutBatchOptionsTemplate');
+            const opts = tpl ? '<option value="">Select Tutorial Batch</option>' + tpl.innerHTML : '<option value="">Select Tutorial Batch</option>';
+            const newItem = document.createElement('div');
+            newItem.className = 'batch-item d-flex gap-2 mb-1 align-items-center';
+            newItem.innerHTML = '<select name="day_batch_' + day + '_' + nextIdx + '" class="form-control form-control-sm" style="max-width:180px;">' + opts + '</select>'
+                + '<button type="button" class="btn btn-sm btn-outline-danger remove-batch" title="Remove"><i class="bi bi-x"></i></button>';
+            list.insertBefore(newItem, this);
+            bindRemoveButtons();
+            updateRemoveButtonsForList(list);
+        });
+    });
+
+    function bindRemoveButtons() {
+        document.querySelectorAll('.remove-batch').forEach(function (btn) {
+            if (btn._bound) return;
+            btn._bound = true;
+            btn.addEventListener('click', function () {
+                const item = this.closest('.batch-item');
+                const list = item.parentElement;
+                item.remove();
+                reindexBatch(list);
+                updateRemoveButtonsForList(list);
+            });
+        });
+    }
+
+    function reindexBatch(list) {
+        const items = list.querySelectorAll('.batch-item');
+        items.forEach(function (it, idx) {
+            it.querySelectorAll('select').forEach(function (sel) {
+                const m = sel.name.match(/^day_batch_(\d+)_/);
+                if (m) sel.name = 'day_batch_' + m[1] + '_' + idx;
+            });
+        });
+    }
+
+    function updateRemoveButtonsForList(list) {
+        if (!list) return;
+        const items = list.querySelectorAll('.batch-item');
+        items.forEach(function (it) {
+            const btn = it.querySelector('.remove-batch');
+            if (btn) btn.disabled = (items.length === 1);
+        });
+        const addBtn = list.querySelector('.add-batch');
+        if (addBtn) {
+            const row = list.closest('.day-slot-row');
+            const cb = row ? row.querySelector('.day-enable-cb') : null;
+            addBtn.style.display = (cb && cb.checked) ? '' : 'none';
+        }
+    }
+
+    bindRemoveButtons();
+    document.querySelectorAll('.day-slot-row').forEach(function (row) {
+        updateRemoveButtonsForList(row.querySelector('.batch-list'));
     });
 </script>
 
