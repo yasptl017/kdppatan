@@ -63,8 +63,9 @@ Options:
   --dbname=NAME           MySQL database name (or set ATTENDANCE_DB_DB env).
                           Defaults to "kdpatt" if not supplied.
 
-If credentials are not supplied via flags or env, the script prompts
-for them interactively (the password is hidden if possible).
+If credentials are not supplied via flags or env, the script falls
+back to the first hosted-style entry in attendance/dbconfig.local.php
+(if one exists), then prompts interactively (password hidden on Unix).
 
 Example:
   php attendance/migrate_attendance.php --host=localhost --user=root
@@ -85,7 +86,7 @@ HELP
         $migrations = [$options['file']];
     }
 
-    // Resolve credentials: flag > env > interactive prompt
+    // Resolve credentials: flag > env > dbconfig.local.php > interactive prompt
     $host   = $options['host']   ?? getenv('ATTENDANCE_DB_HOST') ?: null;
     $user   = $options['user']   ?? getenv('ATTENDANCE_DB_USER') ?: null;
     $pass   = $options['pass']   ?? getenv('ATTENDANCE_DB_PASS');
@@ -94,6 +95,24 @@ HELP
     // Hide pass env value in env listing
     if ($pass === false || $pass === '') {
         $pass = '';
+    }
+
+    // Fall back to attendance/dbconfig.local.php (gitignored — only useful on the server)
+    if ((!$host || !$user) && file_exists(__DIR__ . '/dbconfig.local.php')) {
+        $local_configs = require __DIR__ . '/dbconfig.local.php';
+        if (is_array($local_configs)) {
+            // Use the first hosted-style entry (skip plain localhost/root ones on the server)
+            foreach ($local_configs as $cfg) {
+                if (!empty($cfg['username']) && !empty($cfg['dbname'])
+                    && $cfg['username'] !== 'root') {
+                    $host   = $host   ?: ($cfg['host']     ?? 'localhost');
+                    $user   = $user   ?: ($cfg['username'] ?? '');
+                    $pass   = $pass   ?: ($cfg['password'] ?? '');
+                    $dbname = $dbname !== 'kdpatt' ? $dbname : ($cfg['dbname'] ?? 'kdpatt');
+                    break;
+                }
+            }
+        }
     }
 
     // Interactive fallback
@@ -106,7 +125,6 @@ HELP
             $user = trim(readline("MySQL user [root]: ") ?: 'root');
         }
         if ($pass === null || $pass === '') {
-            // Try to hide password input when posix_tty is available
             $pass = prompt_hidden_password("MySQL password: ");
         }
     }
