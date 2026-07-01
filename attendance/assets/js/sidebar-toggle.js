@@ -235,51 +235,79 @@ document.addEventListener("DOMContentLoaded", () => {
   // ── Scroll-gesture guard ──────────────────────────────────────────
   // iOS Safari and Android Chrome sometimes synthesise a click on the
   // hamburger when a touch-scroll ENDS with the finger near the toggle
-  // area. This is a well-known platform quirk. To suppress it, we mark
-  // a short window after every `scrollend`/`touchend` during which any
-  // click on the hamburger or close button is ignored.
-  let lastScrollEnd = 0;
+  // area. The fix: only block clicks that follow a touch that actually
+  // MOVED (real scroll). A tap (touchstart → touchend with no movement)
+  // is allowed through normally.
+  //
+  // Implementation: track touchstart position; on touchend compute the
+  // distance moved. If the touch moved > 10px, mark `scrollJustEnded`
+  // for SCROLL_GUARD_MS. The click guard then drops clicks within
+  // that window. A still touch is never guarded.
+  let scrollJustEnded = 0;
   const SCROLL_GUARD_MS = 350;
+  const SCROLL_MOVE_THRESHOLD_PX = 10;
 
-  function noteScrollEnd() {
-    lastScrollEnd = Date.now();
-  }
+  let touchStartX = 0;
+  let touchStartY = 0;
+  let touchTracking = false;
 
-  // scrollend is supported on modern mobile browsers.
-  window.addEventListener("scrollend", noteScrollEnd, { passive: true });
-  // Fallback for browsers without scrollend: detect touch end on document.
   document.addEventListener(
-    "touchend",
+    "touchstart",
     (e) => {
-      // Only count it as a scroll if the touch was a small movement.
-      // If the touch is followed immediately by a click on the toggle,
-      // the click will be dropped because lastScrollEnd is recent.
-      // We cannot reliably distinguish a tap from a scroll-end from a
-      // single touchend alone, so we only flag the timestamp — the click
-      // guard below will reject any click that happens within the window.
-      if (!e.touches || e.touches.length === 0) {
-        noteScrollEnd();
+      if (e.touches && e.touches.length === 1) {
+        touchStartX = e.touches[0].clientX;
+        touchStartY = e.touches[0].clientY;
+        touchTracking = true;
       }
     },
     { passive: true }
   );
 
-  // Wrap the existing click handlers on the toggle / close buttons so
-  // they no-op when invoked within the scroll-guard window.
+  document.addEventListener(
+    "touchend",
+    (e) => {
+      if (!touchTracking) return;
+      touchTracking = false;
+      // Identify which finger lifted (changedTouches has the lifted one).
+      const t =
+        e.changedTouches && e.changedTouches[0]
+          ? e.changedTouches[0]
+          : null;
+      if (!t) return;
+      const dx = Math.abs(t.clientX - touchStartX);
+      const dy = Math.abs(t.clientY - touchStartY);
+      if (dx > SCROLL_MOVE_THRESHOLD_PX || dy > SCROLL_MOVE_THRESHOLD_PX) {
+        // Real scroll gesture — block any click within the guard window.
+        scrollJustEnded = Date.now();
+      }
+    },
+    { passive: true }
+  );
+
+  // scrollend fires after momentum/inertial scrolling completes. Honour it
+  // too — if the page actually scrolled, treat it as a scroll gesture.
+  window.addEventListener(
+    "scrollend",
+    () => {
+      scrollJustEnded = Date.now();
+    },
+    { passive: true }
+  );
+
   function guardClick(handler) {
     return (e) => {
-      if (Date.now() - lastScrollEnd < SCROLL_GUARD_MS) {
+      if (Date.now() - scrollJustEnded < SCROLL_GUARD_MS) {
         e.preventDefault();
         e.stopPropagation();
+        scrollJustEnded = 0; // consume — don't block the next legitimate click
         return;
       }
       handler(e);
     };
   }
 
-  // Re-bind click handlers with the guard wrapper.
+  // Bind click handlers (with scroll-guard) on the hamburger and close X.
   if (sidepanelTogglerMobile) {
-    sidepanelTogglerMobile.removeEventListener("click", sidepanelTogglerMobile.__origHandler || (() => {}));
     const origHandler = (e) => {
       e.preventDefault();
       e.stopPropagation();
@@ -293,7 +321,6 @@ document.addEventListener("DOMContentLoaded", () => {
         toggleSidebar();
       }
     };
-    sidepanelTogglerMobile.__origHandler = origHandler;
     sidepanelTogglerMobile.addEventListener("click", guardClick(origHandler));
   }
   if (sidepanelClose) {
