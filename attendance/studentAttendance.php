@@ -65,6 +65,21 @@ function build_term_summary(mysqli $conn, array $studentRecord) {
     $labBatch = strtoupper(trim((string)$studentRecord['labBatch']));
     $tutBatch = strtoupper(trim((string)$studentRecord['tutBatch']));
 
+    // Resolve the mentor for this term. The studentmentor table stores
+    // term + enrollmentNo pairs — if no record exists for this term, the
+    // mentor name is left blank.
+    $mentorName = '';
+    $mentorStmt = $conn->prepare("SELECT mentorName FROM studentmentor WHERE term = ? AND enrollmentNo = ? AND status = 1 LIMIT 1");
+    if ($mentorStmt) {
+        $mentorStmt->bind_param('ss', $term, $enrollment);
+        $mentorStmt->execute();
+        $mentorRes = $mentorStmt->get_result();
+        if ($mentorRow = $mentorRes->fetch_assoc()) {
+            $mentorName = trim((string)($mentorRow['mentorName'] ?? ''));
+        }
+        $mentorStmt->close();
+    }
+
     $semesterSubjects = [];
     $lectureRows = [];
     $labRows = [];
@@ -151,6 +166,7 @@ function build_term_summary(mysqli $conn, array $studentRecord) {
         'class' => $class,
         'labBatch' => (string)$studentRecord['labBatch'],
         'tutBatch' => (string)$studentRecord['tutBatch'],
+        'mentorName' => $mentorName,
         'summaryRows' => $summaryRows,
         'overallTotals' => $overallTotals
     ];
@@ -201,6 +217,24 @@ if ($enrollment !== '') {
 <!DOCTYPE html>
 <html lang="en">
 <?php include('head.php'); ?>
+<style>
+    /* Term-summary header — slight visual separator for the Mentor field */
+    .term-mentor {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.25rem;
+        padding: 0.2rem 0.6rem;
+        margin-left: 0.25rem;
+        background: rgba(21, 163, 98, 0.08);
+        border: 1px solid rgba(21, 163, 98, 0.2);
+        border-radius: 0.4rem;
+        color: #0f7a47;
+        font-weight: 500;
+    }
+    .term-mentor i {
+        color: #15a362;
+    }
+</style>
 <body class="app">
 <?php include('header.php'); ?>
 
@@ -249,6 +283,7 @@ if ($enrollment !== '') {
 
                 <?php foreach ($termSummaries as $termSummary): ?>
                     <?php $overallTotals = $termSummary['overallTotals']; ?>
+                    <?php $termMentorName = trim((string)($termSummary['mentorName'] ?? '')); ?>
                     <div class="app-card shadow-sm mb-3">
                         <div class="app-card-body">
                             <div class="d-flex flex-column flex-md-row justify-content-between align-items-md-center gap-2 mb-3">
@@ -258,7 +293,10 @@ if ($enrollment !== '') {
                                         Semester <?= htmlspecialchars($termSummary['sem']); ?> |
                                         Class <?= htmlspecialchars($termSummary['class']); ?> |
                                         Lab Batch <?= htmlspecialchars((string)$termSummary['labBatch'] === '' ? '-' : $termSummary['labBatch']); ?> |
-                                        Tutorial Batch <?= htmlspecialchars((string)$termSummary['tutBatch'] === '' ? '-' : $termSummary['tutBatch']); ?>
+                                        Tutorial Batch <?= htmlspecialchars((string)$termSummary['tutBatch'] === '' ? '-' : $termSummary['tutBatch']); ?> |
+                                        <span class="term-mentor"><i class="bi bi-person-badge me-1"></i><strong>Mentor:</strong>
+                                            <?= $termMentorName === '' ? '<span class="text-muted">—</span>' : htmlspecialchars($termMentorName); ?>
+                                        </span>
                                     </div>
                                 </div>
                             </div>
