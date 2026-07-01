@@ -254,20 +254,64 @@ usort($slot_list, fn($a, $b) => strcmp($b['date'], $a['date']));
 // ── Check which slots are already filled ─────────────────────────────────────
 // Build a lookup: "type|term|sem|subject|class_or_batch|date|slot" => attendance_id.
 //
-// Key normalization is important: case-insensitive batch/class and trimmed
-// time, so "A1" matches "a1", and "10:30 - 12:30" matches "10:30-12:30".
-// Without this, a lecture filled via the attendance form may not match the
-// slot reconstructed from the mapping because takelabatt uppercases batches
-// while labmapping stores them verbatim.
+// Key normalization handles common data-entry variations:
+//   - Case-insensitive batch/class ("A1" == "a1")
+//   - All whitespace stripped, including NBSP and full-width spaces
+//   - All common dash variants collapsed to a single '-'
+//   - Full-width colon (：) normalized to ASCII (:)
+//   - Trailing/leading punctuation removed
+//   - Subject terms collapse internal whitespace runs
+//   - Time strings stripped of anything except digits and colons (so
+//     "10:30 - 11:30", "10:30-11:30", "10：30–11：30" all match)
 if (!function_exists('attendance_norm_key')) {
+    function attendance_norm_text($value) {
+        $s = (string)$value;
+        if ($s === '') return '';
+        // Convert full-width / smart punctuation to ASCII equivalents
+        $s = strtr($s, [
+            "\xE3\x80\x82" => '.',  // 。
+            "\xEF\xBC\x9A" => ':',  // ：
+            "\xEF\xBC\x8C" => ',',  // ，
+            "\xE2\x80\x93" => '-',  // – (en-dash)
+            "\xE2\x80\x94" => '-',  // — (em-dash)
+            "\xE2\x80\x98" => "'",  // ‘
+            "\xE2\x80\x99" => "'",  // ’
+            "\xE2\x80\x9C" => '"',  // “
+            "\xE2\x80\x9D" => '"',  // ”
+            "\xC2\xA0"      => ' ',  // NBSP
+            "\xE3\x80\x80" => ' ',  // 　 (ideographic space)
+            "\xE2\x80\x82" => ' ',  //   (en space)
+            "\xE2\x80\x83" => ' ',  //   (em space)
+        ]);
+        // Strip BOM and zero-width chars
+        $s = preg_replace('/[\x{FEFF}\x{200B}-\x{200D}\x{2060}]/u', '', $s);
+        // Trim and lowercase
+        $s = strtolower(trim($s));
+        // Collapse internal whitespace runs to single space
+        $s = preg_replace('/\s+/u', ' ', $s);
+        return $s;
+    }
+    function attendance_norm_time($value) {
+        $s = attendance_norm_text($value);
+        if ($s === '') return '';
+        // For time strings, strip everything except digits, colon, and dash
+        // so "10:30 - 11:30" / "10:30-11:30" / "10：30–11：30" all become
+        // "10:30-11:30". Also drop leading zeros consistently.
+        $s = preg_replace('/[^0-9:\-]/', '', $s);
+        // Replace runs of dashes with single dash, trim dashes
+        $s = preg_replace('/-+/', '-', $s);
+        $s = trim($s, '-');
+        // Final canonical form: lowercase digits-digits
+        return $s;
+    }
     function attendance_norm_key($type, $term, $sem, $subject, $class_or_batch, $date, $time) {
         return strtolower(trim((string)$type)) . '|'
-             . strtolower(trim((string)$term)) . '|'
-             . strtolower(trim((string)$sem)) . '|'
-             . strtolower(trim((string)$subject)) . '|'
-             . strtolower(trim((string)$class_or_batch)) . '|'
-             . strtolower(trim((string)$date)) . '|'
-             . strtolower(preg_replace('/\s+/', '', (string)$time));
+             . attendance_norm_text($term) . '|'
+             . attendance_norm_text($sem) . '|'
+             . attendance_norm_text($subject) . '|'
+             . attendance_norm_text($class_or_batch) . '|'
+             . attendance_norm_text($date) . '|'
+             . attendance_norm_time($time);
     }
 }
 
