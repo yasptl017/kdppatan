@@ -261,49 +261,49 @@ usort($slot_list, fn($a, $b) => strcmp($b['date'], $a['date']));
 //   - Full-width colon (：) normalized to ASCII (:)
 //   - Trailing/leading punctuation removed
 //   - Subject terms collapse internal whitespace runs
-//   - Time strings stripped of anything except digits and colons (so
-//     "10:30 - 11:30", "10:30-11:30", "10：30–11：30" all match)
-if (!function_exists('attendance_norm_key')) {
+//   - Time strings stripped of anything except digits, colons, and dashes
+//     (so "10:30 - 11:30", "10:30-11:30", "10：30–11：30" all match)
+//
+// We populate the lookup TWICE per attendance row:
+//   1. With the strict normalized key.
+//   2. With a "loose" key that strips ALL non-alphanumeric chars from each
+//      field, so even extreme variations (mixed case, smart quotes, BOM,
+//      CRLF, ZWJ, etc.) still collide. This is the safety net for
+//      hosted environments where the source data may have been touched
+//      by Excel, Google Sheets, or migration scripts.
+if (!function_exists('attendance_norm_text')) {
     function attendance_norm_text($value) {
         $s = (string)$value;
         if ($s === '') return '';
-        // Convert full-width / smart punctuation to ASCII equivalents
         $s = strtr($s, [
-            "\xE3\x80\x82" => '.',  // 。
-            "\xEF\xBC\x9A" => ':',  // ：
-            "\xEF\xBC\x8C" => ',',  // ，
-            "\xE2\x80\x93" => '-',  // – (en-dash)
-            "\xE2\x80\x94" => '-',  // — (em-dash)
-            "\xE2\x80\x98" => "'",  // ‘
-            "\xE2\x80\x99" => "'",  // ’
-            "\xE2\x80\x9C" => '"',  // “
-            "\xE2\x80\x9D" => '"',  // ”
-            "\xC2\xA0"      => ' ',  // NBSP
-            "\xE3\x80\x80" => ' ',  // 　 (ideographic space)
-            "\xE2\x80\x82" => ' ',  //   (en space)
-            "\xE2\x80\x83" => ' ',  //   (em space)
+            "\xE3\x80\x82" => '.',
+            "\xEF\xBC\x9A" => ':',
+            "\xEF\xBC\x8C" => ',',
+            "\xE2\x80\x93" => '-',
+            "\xE2\x80\x94" => '-',
+            "\xE2\x80\x98" => "'",
+            "\xE2\x80\x99" => "'",
+            "\xE2\x80\x9C" => '"',
+            "\xE2\x80\x9D" => '"',
+            "\xC2\xA0"      => ' ',
+            "\xE3\x80\x80" => ' ',
+            "\xE2\x80\x82" => ' ',
+            "\xE2\x80\x83" => ' ',
         ]);
-        // Strip BOM and zero-width chars
         $s = preg_replace('/[\x{FEFF}\x{200B}-\x{200D}\x{2060}]/u', '', $s);
-        // Trim and lowercase
         $s = strtolower(trim($s));
-        // Collapse internal whitespace runs to single space
         $s = preg_replace('/\s+/u', ' ', $s);
         return $s;
     }
     function attendance_norm_time($value) {
         $s = attendance_norm_text($value);
         if ($s === '') return '';
-        // For time strings, strip everything except digits, colon, and dash
-        // so "10:30 - 11:30" / "10:30-11:30" / "10：30–11：30" all become
-        // "10:30-11:30". Also drop leading zeros consistently.
         $s = preg_replace('/[^0-9:\-]/', '', $s);
-        // Replace runs of dashes with single dash, trim dashes
         $s = preg_replace('/-+/', '-', $s);
         $s = trim($s, '-');
-        // Final canonical form: lowercase digits-digits
         return $s;
     }
+    // Strict key: full normalization (whitespace-preserving for text fields).
     function attendance_norm_key($type, $term, $sem, $subject, $class_or_batch, $date, $time) {
         return strtolower(trim((string)$type)) . '|'
              . attendance_norm_text($term) . '|'
@@ -312,6 +312,29 @@ if (!function_exists('attendance_norm_key')) {
              . attendance_norm_text($class_or_batch) . '|'
              . attendance_norm_text($date) . '|'
              . attendance_norm_time($time);
+    }
+    // Loose key: strip ALL non-alphanumeric chars from every field. Two
+    // attendance rows that only differ by invisible characters will collide
+    // here even when their strict keys differ.
+    function attendance_norm_loose($value) {
+        $s = (string)$value;
+        $s = preg_replace('/[^a-z0-9]/i', '', $s);
+        return strtolower($s);
+    }
+    function attendance_loose_key($type, $term, $sem, $subject, $class_or_batch, $date, $time) {
+        return attendance_norm_loose($type) . '|'
+             . attendance_norm_loose($term) . '|'
+             . attendance_norm_loose($sem) . '|'
+             . attendance_norm_loose($subject) . '|'
+             . attendance_norm_loose($class_or_batch) . '|'
+             . attendance_norm_loose($date) . '|'
+             . attendance_norm_loose($time);
+    }
+    function attendance_mark_filled(&$lookup, $key_loose, $id) {
+        // Store under BOTH keys: the strict key is computed by the caller
+        // and the loose key here. We use the loose key for collision
+        // detection because it's the more permissive of the two.
+        $lookup[$key_loose] = $id;
     }
 }
 
@@ -333,8 +356,10 @@ if (!empty($slot_list)) {
         $att_stmt->execute();
         $att_res = $att_stmt->get_result();
         while ($ar = $att_res->fetch_assoc()) {
-            $key = attendance_norm_key('lecture', $ar['term'], $ar['sem'], $ar['subject'], $ar['class'], $ar['date'], $ar['time']);
-            $filled_lookup[$key] = (int)$ar['id'];
+            $key_strict = attendance_norm_key('lecture', $ar['term'], $ar['sem'], $ar['subject'], $ar['class'], $ar['date'], $ar['time']);
+            $key_loose  = attendance_loose_key('lecture', $ar['term'], $ar['sem'], $ar['subject'], $ar['class'], $ar['date'], $ar['time']);
+            $filled_lookup[$key_strict] = (int)$ar['id'];
+            $filled_lookup[$key_loose]  = (int)$ar['id'];
         }
         $att_stmt->close();
 
@@ -344,8 +369,10 @@ if (!empty($slot_list)) {
         $att_stmt->execute();
         $att_res = $att_stmt->get_result();
         while ($ar = $att_res->fetch_assoc()) {
-            $key = attendance_norm_key('lab', $ar['term'], $ar['sem'], $ar['subject'], $ar['batch'], $ar['date'], $ar['time']);
-            $filled_lookup[$key] = (int)$ar['id'];
+            $key_strict = attendance_norm_key('lab', $ar['term'], $ar['sem'], $ar['subject'], $ar['batch'], $ar['date'], $ar['time']);
+            $key_loose  = attendance_loose_key('lab', $ar['term'], $ar['sem'], $ar['subject'], $ar['batch'], $ar['date'], $ar['time']);
+            $filled_lookup[$key_strict] = (int)$ar['id'];
+            $filled_lookup[$key_loose]  = (int)$ar['id'];
         }
         $att_stmt->close();
 
@@ -355,8 +382,10 @@ if (!empty($slot_list)) {
         $att_stmt->execute();
         $att_res = $att_stmt->get_result();
         while ($ar = $att_res->fetch_assoc()) {
-            $key = attendance_norm_key('tutorial', $ar['term'], $ar['sem'], $ar['subject'], $ar['batch'], $ar['date'], $ar['time']);
-            $filled_lookup[$key] = (int)$ar['id'];
+            $key_strict = attendance_norm_key('tutorial', $ar['term'], $ar['sem'], $ar['subject'], $ar['batch'], $ar['date'], $ar['time']);
+            $key_loose  = attendance_loose_key('tutorial', $ar['term'], $ar['sem'], $ar['subject'], $ar['batch'], $ar['date'], $ar['time']);
+            $filled_lookup[$key_strict] = (int)$ar['id'];
+            $filled_lookup[$key_loose]  = (int)$ar['id'];
         }
         $att_stmt->close();
     }
@@ -365,7 +394,7 @@ if (!empty($slot_list)) {
 // ── Annotate each slot with filled status ─────────────────────────────────────
 foreach ($slot_list as &$slot) {
     $type = $slot['mapping_type'];
-    $key = attendance_norm_key(
+    $key_strict = attendance_norm_key(
         $type,
         $slot['term'],
         $slot['sem'],
@@ -374,10 +403,55 @@ foreach ($slot_list as &$slot) {
         $slot['date'],
         $slot['slot']
     );
-    $slot['filled']        = isset($filled_lookup[$key]);
-    $slot['attendance_id'] = $filled_lookup[$key] ?? null;
+    $key_loose = attendance_loose_key(
+        $type,
+        $slot['term'],
+        $slot['sem'],
+        $slot['subject'],
+        $slot['class'],
+        $slot['date'],
+        $slot['slot']
+    );
+    // Try strict match first; fall back to loose match (which strips ALL
+    // non-alphanumeric chars from every field) so even severe data quality
+    // issues don't break the filled-detection.
+    $matched_key = null;
+    if (isset($filled_lookup[$key_strict])) {
+        $matched_key = $key_strict;
+    } elseif (isset($filled_lookup[$key_loose])) {
+        $matched_key = $key_loose;
+    }
+    $slot['filled']        = $matched_key !== null;
+    $slot['attendance_id'] = $matched_key !== null ? $filled_lookup[$matched_key] : null;
 }
 unset($slot);
+
+// ── Optional diagnostic ────────────────────────────────────────────────────
+// Append `?diag=1` to the page URL to see exactly what is stored for each
+// pending slot and each filled attendance row. This helps diagnose why a
+// filled slot still appears in the Pending list when there is a hidden
+// data-quality mismatch (e.g. NBSP, full-width punctuation, casing).
+$diag_rows = [];
+if (isset($_GET['diag']) && $_GET['diag'] === '1') {
+    foreach ($slot_list as $s) {
+        $diag_rows[] = [
+            'when'          => $s['date'] . ' ' . $s['slot'],
+            'type'          => $s['mapping_type'],
+            'term'          => $s['term'],
+            'sem'           => $s['sem'],
+            'subject_raw'   => $s['subject'],
+            'class_raw'     => $s['class'],
+            'slot_raw'      => $s['slot'],
+            'subject_norm'  => attendance_norm_text($s['subject']),
+            'class_norm'    => attendance_norm_text($s['class']),
+            'slot_norm'     => attendance_norm_time($s['slot']),
+            'key_strict'    => attendance_norm_key($s['mapping_type'], $s['term'], $s['sem'], $s['subject'], $s['class'], $s['date'], $s['slot']),
+            'key_loose'     => attendance_loose_key($s['mapping_type'], $s['term'], $s['sem'], $s['subject'], $s['class'], $s['date'], $s['slot']),
+            'filled'        => !empty($s['filled']),
+        ];
+    }
+    $diag_filled_keys = array_keys($filled_lookup);
+}
 
 $bulk_candidates = array_values(array_filter($slot_list, fn($s) => !$s['filled'] && !$s['skipped']));
 
@@ -703,6 +777,52 @@ $day_names = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
             <?php endif; ?>
             <?php if ($error_msg !== ''): ?>
                 <div class="alert alert-danger mb-3"><i class="bi bi-exclamation-triangle me-2"></i><?= htmlspecialchars($error_msg) ?></div>
+            <?php endif; ?>
+
+            <?php if (!empty($diag_rows)): ?>
+            <div class="app-card shadow-sm mb-3">
+                <div class="app-card-body">
+                    <h5 class="mb-2"><i class="bi bi-bug me-1"></i>Diagnostic — Pending Slot Keys vs Filled Lookup</h5>
+                    <p class="text-muted small mb-2">Remove <code>?diag=1</code> from the URL to hide this block. The <b>Strict</b> and <b>Loose</b> keys are what the page compares against the filled-attendance lookup.</p>
+                    <div class="table-responsive">
+                        <table class="table table-sm table-bordered align-middle mb-3" style="font-size:0.78rem;">
+                            <thead class="table-light">
+                                <tr>
+                                    <th>When</th>
+                                    <th>Type</th>
+                                    <th>Filled?</th>
+                                    <th>Subject (raw → norm)</th>
+                                    <th>Class (raw → norm)</th>
+                                    <th>Slot (raw → norm)</th>
+                                    <th>Strict key</th>
+                                    <th>Loose key</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <?php foreach ($diag_rows as $d): ?>
+                                    <tr class="<?= !empty($d['filled']) ? 'table-success' : 'table-warning' ?>">
+                                        <td><?= htmlspecialchars($d['when']) ?></td>
+                                        <td><?= htmlspecialchars($d['type']) ?></td>
+                                        <td class="text-center"><?= !empty($d['filled']) ? '✓' : '✗' ?></td>
+                                        <td><code class="text-muted">[<?= htmlspecialchars($d['subject_raw']) ?>]</code><br><?= htmlspecialchars($d['subject_norm']) ?></td>
+                                        <td><code class="text-muted">[<?= htmlspecialchars($d['class_raw']) ?>]</code><br><?= htmlspecialchars($d['class_norm']) ?></td>
+                                        <td><code class="text-muted">[<?= htmlspecialchars($d['slot_raw']) ?>]</code><br><?= htmlspecialchars($d['slot_norm']) ?></td>
+                                        <td><code style="word-break:break-all;font-size:0.7rem;"><?= htmlspecialchars($d['key_strict']) ?></code></td>
+                                        <td><code style="word-break:break-all;font-size:0.7rem;"><?= htmlspecialchars($d['key_loose']) ?></code></td>
+                                    </tr>
+                                <?php endforeach; ?>
+                            </tbody>
+                        </table>
+                    </div>
+                    <h6 class="mt-3 mb-1">Filled-attendance lookup keys (<?= count($diag_filled_keys) ?>)</h6>
+                    <p class="text-muted small mb-1">These are the keys from <code>lecattendance</code>, <code>labattendance</code>, and <code>tutattendance</code> rows. If you see a row above marked <b>not filled</b> whose key appears here, the match should succeed — if it doesn't, the loose-key table above will reveal the difference.</p>
+                    <div style="max-height:200px;overflow:auto;font-size:0.72rem;background:#1e1e1e;color:#d4d4d4;padding:0.5rem;border-radius:0.3rem;">
+                        <?php foreach ($diag_filled_keys as $k): ?>
+                            <div><code style="color:#ce9178;"><?= htmlspecialchars($k) ?></code></div>
+                        <?php endforeach; ?>
+                    </div>
+                </div>
+            </div>
             <?php endif; ?>
 
             <?php if (empty($mappings_rows)): ?>
