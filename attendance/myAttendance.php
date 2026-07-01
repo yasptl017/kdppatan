@@ -506,6 +506,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['autofill_pending_max'
     $skipped_existing = 0;
     $skipped_duplicate = 0;
     $failed = 0;
+    $first_failure_reason = '';
 
     foreach ($bulk_candidates as $slot) {
         $slot_type = (string)($slot['mapping_type'] ?? 'lecture');
@@ -656,13 +657,22 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['autofill_pending_max'
             $insert_stmt->bind_param('sssssssss', $date, $time, $term, $faculty, $sem, $subject, $class, $present_csv, $lab_no);
         } else {
             // Tutorial: date, logdate, time, term, faculty, sem, subject, batch, presentNo
-            $insert_stmt->bind_param('sssssssss', $date, $time, $term, $faculty, $sem, $subject, $class, $present_csv);
+            $insert_stmt->bind_param('ssssssss', $date, $time, $term, $faculty, $sem, $subject, $class, $present_csv);
         }
 
         if ($insert_stmt->execute()) {
             $created++;
         } else {
             $failed++;
+            if ($first_failure_reason === '') {
+                $first_failure_reason = sprintf(
+                    '[%s] %s on %s — %s',
+                    $slot_type,
+                    $subject,
+                    $date,
+                    $conn->error ?: 'unknown error'
+                );
+            }
         }
     }
 
@@ -686,6 +696,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['autofill_pending_max'
         }
         if ($failed > 0) {
             $summary .= ", failed {$failed}";
+            if ($first_failure_reason !== '') {
+                $summary .= " (first error: " . $first_failure_reason . ")";
+            }
         }
         $summary .= '.';
         $redirect_params['msg'] = $summary;
