@@ -252,7 +252,25 @@ if ($filter_term !== '') {
 usort($slot_list, fn($a, $b) => strcmp($b['date'], $a['date']));
 
 // ── Check which slots are already filled ─────────────────────────────────────
-// Build a lookup: "type|term|sem|subject|class_or_batch|date|slot" => [attendance_id, attendance_table]
+// Build a lookup: "type|term|sem|subject|class_or_batch|date|slot" => attendance_id.
+//
+// Key normalization is important: case-insensitive batch/class and trimmed
+// time, so "A1" matches "a1", and "10:30 - 12:30" matches "10:30-12:30".
+// Without this, a lecture filled via the attendance form may not match the
+// slot reconstructed from the mapping because takelabatt uppercases batches
+// while labmapping stores them verbatim.
+if (!function_exists('attendance_norm_key')) {
+    function attendance_norm_key($type, $term, $sem, $subject, $class_or_batch, $date, $time) {
+        return strtolower(trim((string)$type)) . '|'
+             . strtolower(trim((string)$term)) . '|'
+             . strtolower(trim((string)$sem)) . '|'
+             . strtolower(trim((string)$subject)) . '|'
+             . strtolower(trim((string)$class_or_batch)) . '|'
+             . strtolower(trim((string)$date)) . '|'
+             . strtolower(preg_replace('/\s+/', '', (string)$time));
+    }
+}
+
 $filled_lookup = [];
 if (!empty($slot_list)) {
     // Collect unique term/sem combos to query efficiently
@@ -271,7 +289,7 @@ if (!empty($slot_list)) {
         $att_stmt->execute();
         $att_res = $att_stmt->get_result();
         while ($ar = $att_res->fetch_assoc()) {
-            $key = 'lecture|' . $ar['term'] . '|' . $ar['sem'] . '|' . $ar['subject'] . '|' . $ar['class'] . '|' . $ar['date'] . '|' . $ar['time'];
+            $key = attendance_norm_key('lecture', $ar['term'], $ar['sem'], $ar['subject'], $ar['class'], $ar['date'], $ar['time']);
             $filled_lookup[$key] = (int)$ar['id'];
         }
         $att_stmt->close();
@@ -282,7 +300,7 @@ if (!empty($slot_list)) {
         $att_stmt->execute();
         $att_res = $att_stmt->get_result();
         while ($ar = $att_res->fetch_assoc()) {
-            $key = 'lab|' . $ar['term'] . '|' . $ar['sem'] . '|' . $ar['subject'] . '|' . $ar['batch'] . '|' . $ar['date'] . '|' . $ar['time'];
+            $key = attendance_norm_key('lab', $ar['term'], $ar['sem'], $ar['subject'], $ar['batch'], $ar['date'], $ar['time']);
             $filled_lookup[$key] = (int)$ar['id'];
         }
         $att_stmt->close();
@@ -293,7 +311,7 @@ if (!empty($slot_list)) {
         $att_stmt->execute();
         $att_res = $att_stmt->get_result();
         while ($ar = $att_res->fetch_assoc()) {
-            $key = 'tutorial|' . $ar['term'] . '|' . $ar['sem'] . '|' . $ar['subject'] . '|' . $ar['batch'] . '|' . $ar['date'] . '|' . $ar['time'];
+            $key = attendance_norm_key('tutorial', $ar['term'], $ar['sem'], $ar['subject'], $ar['batch'], $ar['date'], $ar['time']);
             $filled_lookup[$key] = (int)$ar['id'];
         }
         $att_stmt->close();
@@ -303,7 +321,15 @@ if (!empty($slot_list)) {
 // ── Annotate each slot with filled status ─────────────────────────────────────
 foreach ($slot_list as &$slot) {
     $type = $slot['mapping_type'];
-    $key = $type . '|' . $slot['term'] . '|' . $slot['sem'] . '|' . $slot['subject'] . '|' . $slot['class'] . '|' . $slot['date'] . '|' . $slot['slot'];
+    $key = attendance_norm_key(
+        $type,
+        $slot['term'],
+        $slot['sem'],
+        $slot['subject'],
+        $slot['class'],
+        $slot['date'],
+        $slot['slot']
+    );
     $slot['filled']        = isset($filled_lookup[$key]);
     $slot['attendance_id'] = $filled_lookup[$key] ?? null;
 }
@@ -365,7 +391,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['autofill_pending_max'
 
     foreach ($bulk_candidates as $slot) {
         $slot_type = (string)($slot['mapping_type'] ?? 'lecture');
-        $slot_key = $slot_type . '|' . $slot['term'] . '|' . $slot['sem'] . '|' . $slot['subject'] . '|' . $slot['class'] . '|' . $slot['date'] . '|' . $slot['slot'];
+        $slot_key = attendance_norm_key(
+            $slot_type,
+            $slot['term'],
+            $slot['sem'],
+            $slot['subject'],
+            $slot['class'],
+            $slot['date'],
+            $slot['slot']
+        );
         if (isset($processed_slot_keys[$slot_key])) {
             $skipped_duplicate++;
             continue;
