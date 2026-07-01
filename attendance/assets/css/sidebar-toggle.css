@@ -558,6 +558,17 @@ a:focus > .user-icon-holder,
 }
 
 /* ========================================
+   Ensure close button is always visible on mobile
+   ======================================== */
+@media (max-width: 1199.98px) {
+    .sidepanel-close {
+        display: inline-flex !important;
+        visibility: visible !important;
+        opacity: 1 !important;
+    }
+}
+
+/* ========================================
    Smooth transitions for sidebar items
    ======================================== */
 .nav-link-text,
