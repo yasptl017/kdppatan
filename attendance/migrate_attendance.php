@@ -34,12 +34,41 @@
 $is_cli = (PHP_SAPI === 'cli');
 
 // ── List of attendance migrations to run in order ───────────────────────────
-$migrations = [
-    'db/migration_004_create_attendance_faculty.sql',
-    'db/migration_005_create_attendance_students_subjects.sql',
-    'db/migration_006_create_attendance_mappings.sql',
-    'db/migration_007_create_attendance_records.sql',
-];
+// Auto-discover every db/migration_*.sql file in numeric order. This keeps
+// the runner in sync with new migrations without having to edit this list
+// each time.
+function discover_migrations() {
+    $project_root = dirname(__DIR__);
+    $db_dir = $project_root . DIRECTORY_SEPARATOR . 'db';
+    if (!is_dir($db_dir)) {
+        return [];
+    }
+    $candidates = glob($db_dir . DIRECTORY_SEPARATOR . 'migration_*.sql');
+    if (!$candidates) {
+        return [];
+    }
+    sort($candidates, SORT_STRING);
+    $out = [];
+    foreach ($candidates as $full_path) {
+        $rel = 'db/' . basename($full_path);
+        $out[] = $rel;
+    }
+    return $out;
+}
+
+// Explicit fallback list (used if the db/ directory can't be read for some
+// reason — e.g. a custom deploy that ships migrations outside db/).
+$migrations = discover_migrations();
+if (empty($migrations)) {
+    $migrations = [
+        'db/migration_004_create_attendance_faculty.sql',
+        'db/migration_005_create_attendance_students_subjects.sql',
+        'db/migration_006_create_attendance_mappings.sql',
+        'db/migration_007_create_attendance_records.sql',
+        'db/migration_008_create_attendance_studentmentor.sql',
+        'db/migration_009_fix_attendance_column_widths.sql',
+    ];
+}
 
 // ── Establish connection (CLI mode reads credentials from flags / env / stdin) ─
 $conn = null;
@@ -75,8 +104,12 @@ HELP
     }
 
     if (isset($options['list'])) {
-        fwrite(STDOUT, "Available attendance migrations:\n");
-        foreach ($migrations as $m) {
+        $list = discover_migrations();
+        if (empty($list)) {
+            $list = $migrations;
+        }
+        fwrite(STDOUT, "Available attendance migrations (auto-discovered):\n");
+        foreach ($list as $m) {
             fwrite(STDOUT, "  - $m\n");
         }
         exit(0);
