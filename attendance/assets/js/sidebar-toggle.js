@@ -128,18 +128,159 @@ document.addEventListener("DOMContentLoaded", () => {
   if (sidepanelTogglerDesktop) {
     sidepanelTogglerDesktop.setAttribute("aria-expanded", "true");
     sidepanelTogglerDesktop.setAttribute("role", "button");
-    sidepanelTogglerDesktop.addEventListener("click", (e) => {
-      e.preventDefault();
-      e.stopPropagation();
-      toggleSidebar();
-    });
   }
 
   // ── Mobile toggle button (hamburger menu) ──────────────────────────
   if (sidepanelTogglerMobile) {
     sidepanelTogglerMobile.setAttribute("aria-expanded", "false");
     sidepanelTogglerMobile.setAttribute("role", "button");
-    sidepanelTogglerMobile.addEventListener("click", (e) => {
+  }
+
+  // ── Close button (X icon — inside the sidebar) ─────────────────────
+  // Initial ARIA is set; click handler is attached later with scroll-guard.
+
+  // ── Window resize — guard against spurious resize events on mobile ─
+  // Strict policy: on mobile, the sidebar MUST NOT auto-open or auto-close
+  // in response to ANY resize event. Mobile browsers (iOS Safari, Android
+  // Chrome) fire `resize` during scroll-bounce, rubber-band overscroll,
+  // soft-keyboard show/hide, address bar collapse, and pinch-zoom. Each of
+  // those events can briefly push innerWidth across the 1200px breakpoint,
+  // and reacting to it would open the sidebar while the user is just
+  // scrolling the page.
+  //
+  // The sidebar visibility on mobile is governed EXCLUSIVELY by user
+  // gestures (hamburger click, close button click, backdrop tap). Resize
+  // is allowed only to update `isDesktopLayout` for CSS purposes and to
+  // re-apply a confirmed desktop layout transition (with a long debounce
+  // and stable-width check, see below). On mobile, this listener is a
+  // no-op.
+  let resizeStableSinceMs = 0;
+  let pendingDesktop = null;
+  let resizeDebounce = null;
+
+  // Track consecutive resize events at a stable width. Only when innerWidth
+  // remains across the breakpoint for ≥400ms do we treat it as a real
+  // transition. Scroll-bounce produces a single transient read followed
+  // by a return to the original width, so it never accumulates.
+  window.addEventListener("resize", () => {
+    const newWidth = window.innerWidth;
+    const newHeight = window.innerHeight;
+    const heightDelta = Math.abs(newHeight - lastInnerHeight);
+    const widthDelta = Math.abs(newWidth - lastInnerWidth);
+    lastInnerWidth = newWidth;
+    lastInnerHeight = newHeight;
+    const now = Date.now();
+
+    const nextIsDesktop = newWidth >= 1200;
+
+    // No layout change at all — nothing to do.
+    if (nextIsDesktop === isDesktopLayout) {
+      resizeStableSinceMs = 0;
+      pendingDesktop = null;
+      return;
+    }
+
+    // We crossed the breakpoint. Track stability: is this width the same
+    // as the last event? If yes, accumulate; if no, reset.
+    if (pendingDesktop === nextIsDesktop) {
+      if (resizeStableSinceMs === 0) resizeStableSinceMs = now;
+      const stableFor = now - resizeStableSinceMs;
+      if (stableFor < 400) {
+        // Not stable yet — wait. Do NOT mutate the sidebar.
+        if (resizeDebounce) clearTimeout(resizeDebounce);
+        resizeDebounce = setTimeout(() => {
+          // After the wait, re-check: are we still at the new breakpoint?
+          if (window.innerWidth >= 1200 === pendingDesktop) {
+            isDesktopLayout = pendingDesktop;
+            if (pendingDesktop) {
+              const isCollapsed = localStorage.getItem(SIDEBAR_STATE_KEY) === "true";
+              if (isCollapsed) collapseSidebar();
+              else expandSidebar();
+            } else {
+              // Mobile: keep current state, do NOT mutate.
+              // (Mobile sidebar is governed by user clicks only.)
+            }
+          }
+          resizeStableSinceMs = 0;
+          pendingDesktop = null;
+        }, 400);
+        return;
+      }
+    } else {
+      // New transient direction — start stability countdown fresh.
+      pendingDesktop = nextIsDesktop;
+      resizeStableSinceMs = now;
+      if (resizeDebounce) clearTimeout(resizeDebounce);
+      resizeDebounce = setTimeout(() => {
+        if (window.innerWidth >= 1200 === pendingDesktop) {
+          isDesktopLayout = pendingDesktop;
+          if (pendingDesktop) {
+            const isCollapsed = localStorage.getItem(SIDEBAR_STATE_KEY) === "true";
+            if (isCollapsed) collapseSidebar();
+            else expandSidebar();
+          }
+        }
+        resizeStableSinceMs = 0;
+        pendingDesktop = null;
+      }, 400);
+      return;
+    }
+
+    // Suppress unused-var lint warnings (heightDelta/widthDelta are useful
+    // for future diagnostics but not for this check).
+    void heightDelta;
+    void widthDelta;
+  });
+
+  // ── Scroll-gesture guard ──────────────────────────────────────────
+  // iOS Safari and Android Chrome sometimes synthesise a click on the
+  // hamburger when a touch-scroll ENDS with the finger near the toggle
+  // area. This is a well-known platform quirk. To suppress it, we mark
+  // a short window after every `scrollend`/`touchend` during which any
+  // click on the hamburger or close button is ignored.
+  let lastScrollEnd = 0;
+  const SCROLL_GUARD_MS = 350;
+
+  function noteScrollEnd() {
+    lastScrollEnd = Date.now();
+  }
+
+  // scrollend is supported on modern mobile browsers.
+  window.addEventListener("scrollend", noteScrollEnd, { passive: true });
+  // Fallback for browsers without scrollend: detect touch end on document.
+  document.addEventListener(
+    "touchend",
+    (e) => {
+      // Only count it as a scroll if the touch was a small movement.
+      // If the touch is followed immediately by a click on the toggle,
+      // the click will be dropped because lastScrollEnd is recent.
+      // We cannot reliably distinguish a tap from a scroll-end from a
+      // single touchend alone, so we only flag the timestamp — the click
+      // guard below will reject any click that happens within the window.
+      if (!e.touches || e.touches.length === 0) {
+        noteScrollEnd();
+      }
+    },
+    { passive: true }
+  );
+
+  // Wrap the existing click handlers on the toggle / close buttons so
+  // they no-op when invoked within the scroll-guard window.
+  function guardClick(handler) {
+    return (e) => {
+      if (Date.now() - lastScrollEnd < SCROLL_GUARD_MS) {
+        e.preventDefault();
+        e.stopPropagation();
+        return;
+      }
+      handler(e);
+    };
+  }
+
+  // Re-bind click handlers with the guard wrapper.
+  if (sidepanelTogglerMobile) {
+    sidepanelTogglerMobile.removeEventListener("click", sidepanelTogglerMobile.__origHandler || (() => {}));
+    const origHandler = (e) => {
       e.preventDefault();
       e.stopPropagation();
       if (window.innerWidth < 1200) {
@@ -151,12 +292,12 @@ document.addEventListener("DOMContentLoaded", () => {
       } else {
         toggleSidebar();
       }
-    });
+    };
+    sidepanelTogglerMobile.__origHandler = origHandler;
+    sidepanelTogglerMobile.addEventListener("click", guardClick(origHandler));
   }
-
-  // ── Close button (X icon — inside the sidebar) ─────────────────────
   if (sidepanelClose) {
-    sidepanelClose.addEventListener("click", (e) => {
+    const origHandler = (e) => {
       e.preventDefault();
       e.stopPropagation();
       if (window.innerWidth < 1200) {
@@ -164,82 +305,24 @@ document.addEventListener("DOMContentLoaded", () => {
       } else {
         toggleSidebar();
       }
-    });
+    };
+    sidepanelClose.addEventListener("click", guardClick(origHandler));
   }
 
-  // ── Backdrop click (when sidebar is open on mobile) closes it ──────
-  if (sidepanelDrop) {
-    sidepanelDrop.addEventListener("click", (e) => {
-      e.preventDefault();
-      if (window.innerWidth < 1200) {
-        closeMobileSidebar();
-      } else {
-        toggleSidebar();
+  // ── Safety net: MutationObserver catches any rogue `sidepanel-visible`
+  // class added by other code on mobile and forces it off unless the user
+  // has actually opened the sidebar via the hamburger in this session.
+  if (typeof MutationObserver !== "undefined") {
+    const mo = new MutationObserver(() => {
+      if (window.innerWidth < 1200 && !mobileUserOpened) {
+        if (appSidepanel.classList.contains("sidepanel-visible")) {
+          appSidepanel.classList.remove("sidepanel-visible");
+          appSidepanel.classList.add("sidepanel-hidden");
+        }
       }
     });
+    mo.observe(appSidepanel, { attributes: true, attributeFilter: ["class"] });
   }
-
-  // ── Window resize — guard against transient breakpoint flips ──────
-  // Mobile browsers (especially iOS Safari and Android Chrome) fire
-  // resize events when the soft keyboard opens/closes. innerWidth can
-  // transiently jump past 1200px even on a phone. If we naively read
-  // localStorage and call expandSidebar() during such a transient flip,
-  // the sidebar pops open while the user is filling attendance, with no
-  // toggle click. We therefore require:
-  //   1. innerWidth crossing the breakpoint for ≥120ms, AND
-  //   2. innerHeight changing by more than 80px (which indicates an
-  //      orientation / window change, NOT a keyboard event).
-  // Otherwise we leave the sidebar alone.
-  let resizeTimer = null;
-  let pendingBreakpoint = null;
-
-  function applyBreakpoint(nextIsDesktop) {
-    isDesktopLayout = nextIsDesktop;
-    if (nextIsDesktop) {
-      const isCollapsed = localStorage.getItem(SIDEBAR_STATE_KEY) === "true";
-      if (isCollapsed) collapseSidebar();
-      else expandSidebar();
-    } else {
-      // On mobile, do NOT auto-open. Restore the user's explicit intent
-      // from this session, but if they never opened it, keep it closed.
-      if (mobileUserOpened) openMobileSidebar();
-      else closeMobileSidebar();
-    }
-  }
-
-  window.addEventListener("resize", () => {
-    const newWidth = window.innerWidth;
-    const newHeight = window.innerHeight;
-    const nextIsDesktop = newWidth >= 1200;
-    const heightDelta = Math.abs(newHeight - lastInnerHeight);
-
-    // Always update baselines for the next comparison.
-    lastInnerWidth = newWidth;
-    lastInnerHeight = newHeight;
-
-    // Only act when the layout breakpoint actually crossed.
-    if (nextIsDesktop === isDesktopLayout) {
-      return;
-    }
-
-    // Soft-keyboard-driven resize: only the height changed meaningfully,
-    // not the width crossing. The width "crossing" here is a measurement
-    // artefact — ignore it.
-    if (heightDelta > 80 && Math.abs(newWidth - lastInnerWidth) < 60) {
-      // Looks like keyboard toggling, not a real layout change. Wait.
-      return;
-    }
-
-    // Debounce: wait 120ms to confirm the layout change is stable before
-    // mutating the sidebar. This prevents flashing during orientation
-    // animations and pinch-zoom gestures.
-    pendingBreakpoint = nextIsDesktop;
-    if (resizeTimer) clearTimeout(resizeTimer);
-    resizeTimer = setTimeout(() => {
-      if (pendingBreakpoint === isDesktopLayout) return;
-      applyBreakpoint(pendingBreakpoint);
-    }, 120);
-  });
 
   initSidebar();
 });
