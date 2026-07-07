@@ -331,7 +331,7 @@ if (!empty($selected_batches_normalized)) {
     }
 }
 
-// ── Autofill: today's related attendance records ──────────────────────────────
+// ── Autofill: nearest attendance records (same day → before → after) ───────────
 // Collect enrollment numbers of students in the selected batches
 $batch_enrollments = [];
 if ($students_result && $total_students > 0) {
@@ -344,43 +344,157 @@ if ($students_result && $total_students > 0) {
 
 $autofill_records = [];
 if (!empty($batch_enrollments)) {
-    $att_date_esc = $conn->real_escape_string($data['date']);
+    $att_date = $data['date'];
+    $att_date_esc = $conn->real_escape_string($att_date);
 
+    // Track found record dates to show in label
+    $found_dates = [];
+
+    // 1) SAME DAY records first
     // Lecture records today
-    $lec_res = $conn->query("SELECT id, subject, class, time, presentNo FROM lecattendance WHERE term='{$escaped_term}' AND sem='{$escaped_sem}' AND date='{$att_date_esc}' ORDER BY id DESC");
+    $lec_res = $conn->query("SELECT id, subject, class, time, presentNo, date FROM lecattendance WHERE term='{$escaped_term}' AND sem='{$escaped_sem}' AND date='{$att_date_esc}' ORDER BY id DESC");
     if ($lec_res) {
         while ($row = $lec_res->fetch_assoc()) {
             $all  = array_filter(array_map('trim', explode(',', (string)$row['presentNo'])));
             $filt = array_values(array_intersect($all, $batch_enrollments));
             if (!empty($filt)) {
-                $autofill_records[] = ['type' => 'Lecture', 'label' => 'Lecture · ' . $row['subject'] . ' · Class ' . $row['class'] . ' · ' . $row['time'], 'present' => $filt];
+                $autofill_records[] = ['type' => 'Lecture', 'label' => 'Lecture  -  ' . $row['subject'] . '  -  Class ' . $row['class'] . '  -  ' . $row['time'], 'present' => $filt, 'sort_date' => $row['date'], 'date_order' => 0];
             }
         }
     }
 
     // Other lab records today
-    $lab_res = $conn->query("SELECT id, subject, batch, presentNo FROM labattendance WHERE term='{$escaped_term}' AND sem='{$escaped_sem}' AND date='{$att_date_esc}' AND labNo IS NOT NULL AND labNo!='' ORDER BY id DESC");
+    $lab_res = $conn->query("SELECT id, subject, batch, presentNo, date FROM labattendance WHERE term='{$escaped_term}' AND sem='{$escaped_sem}' AND date='{$att_date_esc}' AND labNo IS NOT NULL AND labNo!='' ORDER BY id DESC");
     if ($lab_res) {
         while ($row = $lab_res->fetch_assoc()) {
             $all  = array_filter(array_map('trim', explode(',', (string)$row['presentNo'])));
             $filt = array_values(array_intersect($all, $batch_enrollments));
             if (!empty($filt)) {
-                $autofill_records[] = ['type' => 'Lab', 'label' => 'Lab · ' . $row['subject'] . ' · Batch ' . $row['batch'], 'present' => $filt];
+                $autofill_records[] = ['type' => 'Lab', 'label' => 'Lab  -  ' . $row['subject'] . '  -  Batch ' . $row['batch'], 'present' => $filt, 'sort_date' => $row['date'], 'date_order' => 0];
             }
         }
     }
 
     // Tutorial records today
-    $tut_res = $conn->query("SELECT id, subject, batch, presentNo FROM tutattendance WHERE term='{$escaped_term}' AND sem='{$escaped_sem}' AND date='{$att_date_esc}' ORDER BY id DESC");
+    $tut_res = $conn->query("SELECT id, subject, batch, presentNo, date FROM tutattendance WHERE term='{$escaped_term}' AND sem='{$escaped_sem}' AND date='{$att_date_esc}' ORDER BY id DESC");
     if ($tut_res) {
         while ($row = $tut_res->fetch_assoc()) {
             $all  = array_filter(array_map('trim', explode(',', (string)$row['presentNo'])));
             $filt = array_values(array_intersect($all, $batch_enrollments));
             if (!empty($filt)) {
-                $autofill_records[] = ['type' => 'Tutorial', 'label' => 'Tutorial · ' . $row['subject'] . ' · Batch ' . $row['batch'], 'present' => $filt];
+                $autofill_records[] = ['type' => 'Tutorial', 'label' => 'Tutorial  -  ' . $row['subject'] . '  -  Batch ' . $row['batch'], 'present' => $filt, 'sort_date' => $row['date'], 'date_order' => 0];
             }
         }
     }
+
+    // 2) PREVIOUS DAYS (going backwards, up to 30 days)
+    $prev_found = false;
+    for ($i = 1; $i <= 30; $i++) {
+        $prev_date = date('Y-m-d', strtotime($att_date . " -{$i} days"));
+        $prev_date_esc = $conn->real_escape_string($prev_date);
+
+        // Lecture
+        $lec_res = $conn->query("SELECT id, subject, class, time, presentNo, date FROM lecattendance WHERE term='{$escaped_term}' AND sem='{$escaped_sem}' AND date='{$prev_date_esc}' ORDER BY id DESC");
+        if ($lec_res && $lec_res->num_rows > 0) {
+            $prev_found = true;
+            while ($row = $lec_res->fetch_assoc()) {
+                $all  = array_filter(array_map('trim', explode(',', (string)$row['presentNo'])));
+                $filt = array_values(array_intersect($all, $batch_enrollments));
+                if (!empty($filt)) {
+                    $autofill_records[] = ['type' => 'Lecture', 'label' => 'Lecture  -  ' . $row['subject'] . '  -  Class ' . $row['class'] . '  -  ' . $row['time'] . ' (' . $prev_date . ')', 'present' => $filt, 'sort_date' => $row['date'], 'date_order' => -$i];
+                }
+            }
+        }
+
+        // Lab
+        $lab_res = $conn->query("SELECT id, subject, batch, presentNo, date FROM labattendance WHERE term='{$escaped_term}' AND sem='{$escaped_sem}' AND date='{$prev_date_esc}' AND labNo IS NOT NULL AND labNo!='' ORDER BY id DESC");
+        if ($lab_res && $lab_res->num_rows > 0) {
+            $prev_found = true;
+            while ($row = $lab_res->fetch_assoc()) {
+                $all  = array_filter(array_map('trim', explode(',', (string)$row['presentNo'])));
+                $filt = array_values(array_intersect($all, $batch_enrollments));
+                if (!empty($filt)) {
+                    $autofill_records[] = ['type' => 'Lab', 'label' => 'Lab  -  ' . $row['subject'] . '  -  Batch ' . $row['batch'] . ' (' . $prev_date . ')', 'present' => $filt, 'sort_date' => $row['date'], 'date_order' => -$i];
+                }
+            }
+        }
+
+        // Tutorial
+        $tut_res = $conn->query("SELECT id, subject, batch, presentNo, date FROM tutattendance WHERE term='{$escaped_term}' AND sem='{$escaped_sem}' AND date='{$prev_date_esc}' ORDER BY id DESC");
+        if ($tut_res && $tut_res->num_rows > 0) {
+            $prev_found = true;
+            while ($row = $tut_res->fetch_assoc()) {
+                $all  = array_filter(array_map('trim', explode(',', (string)$row['presentNo'])));
+                $filt = array_values(array_intersect($all, $batch_enrollments));
+                if (!empty($filt)) {
+                    $autofill_records[] = ['type' => 'Tutorial', 'label' => 'Tutorial  -  ' . $row['subject'] . '  -  Batch ' . $row['batch'] . ' (' . $prev_date . ')', 'present' => $filt, 'sort_date' => $row['date'], 'date_order' => -$i];
+                }
+            }
+        }
+
+        // Stop if we found records on this day
+        if ($prev_found) break;
+    }
+
+    // 3) NEXT DAYS (only if no previous records found, going forwards, up to 30 days)
+    if (!$prev_found) {
+        for ($i = 1; $i <= 30; $i++) {
+            $next_date = date('Y-m-d', strtotime($att_date . " +{$i} days"));
+            $next_date_esc = $conn->real_escape_string($next_date);
+
+            $found_in_this_day = false;
+
+            // Lecture
+            $lec_res = $conn->query("SELECT id, subject, class, time, presentNo, date FROM lecattendance WHERE term='{$escaped_term}' AND sem='{$escaped_sem}' AND date='{$next_date_esc}' ORDER BY id DESC");
+            if ($lec_res && $lec_res->num_rows > 0) {
+                $found_in_this_day = true;
+                while ($row = $lec_res->fetch_assoc()) {
+                    $all  = array_filter(array_map('trim', explode(',', (string)$row['presentNo'])));
+                    $filt = array_values(array_intersect($all, $batch_enrollments));
+                    if (!empty($filt)) {
+                        $autofill_records[] = ['type' => 'Lecture', 'label' => 'Lecture  -  ' . $row['subject'] . '  -  Class ' . $row['class'] . '  -  ' . $row['time'] . ' (' . $next_date . ')', 'present' => $filt, 'sort_date' => $row['date'], 'date_order' => $i];
+                    }
+                }
+            }
+
+            // Lab
+            $lab_res = $conn->query("SELECT id, subject, batch, presentNo, date FROM labattendance WHERE term='{$escaped_term}' AND sem='{$escaped_sem}' AND date='{$next_date_esc}' AND labNo IS NOT NULL AND labNo!='' ORDER BY id DESC");
+            if ($lab_res && $lab_res->num_rows > 0) {
+                $found_in_this_day = true;
+                while ($row = $lab_res->fetch_assoc()) {
+                    $all  = array_filter(array_map('trim', explode(',', (string)$row['presentNo'])));
+                    $filt = array_values(array_intersect($all, $batch_enrollments));
+                    if (!empty($filt)) {
+                        $autofill_records[] = ['type' => 'Lab', 'label' => 'Lab  -  ' . $row['subject'] . '  -  Batch ' . $row['batch'] . ' (' . $next_date . ')', 'present' => $filt, 'sort_date' => $row['date'], 'date_order' => $i];
+                    }
+                }
+            }
+
+            // Tutorial
+            $tut_res = $conn->query("SELECT id, subject, batch, presentNo, date FROM tutattendance WHERE term='{$escaped_term}' AND sem='{$escaped_sem}' AND date='{$next_date_esc}' ORDER BY id DESC");
+            if ($tut_res && $tut_res->num_rows > 0) {
+                $found_in_this_day = true;
+                while ($row = $tut_res->fetch_assoc()) {
+                    $all  = array_filter(array_map('trim', explode(',', (string)$row['presentNo'])));
+                    $filt = array_values(array_intersect($all, $batch_enrollments));
+                    if (!empty($filt)) {
+                        $autofill_records[] = ['type' => 'Tutorial', 'label' => 'Tutorial  -  ' . $row['subject'] . '  -  Batch ' . $row['batch'] . ' (' . $next_date . ')', 'present' => $filt, 'sort_date' => $row['date'], 'date_order' => $i];
+                    }
+                }
+            }
+
+            // Stop if we found records on this day
+            if ($found_in_this_day) break;
+        }
+    }
+
+    // Sort: same day first, then by date_order (nearest first)
+    usort($autofill_records, function($a, $b) {
+        if ($a['date_order'] != $b['date_order']) {
+            return abs($a['date_order']) - abs($b['date_order']);
+        }
+        return 0;
+    });
 }
 // ─────────────────────────────────────────────────────────────────────────────
 ?>
@@ -428,7 +542,7 @@ if (!empty($batch_enrollments)) {
                         </div>
                         <div class="col-6 col-md-4 col-lg-2">
                             <span class="text-muted d-block" style="font-size:0.75rem;font-weight:600;text-transform:uppercase;">Batches &amp; Lab</span>
-                            <strong><?= htmlspecialchars(!empty($selected_batches) ? implode(', ', $selected_batches) . ' · ' . $batch_lab_csv : '-') ?></strong>
+                            <strong><?= htmlspecialchars(!empty($selected_batches) ? implode(', ', $selected_batches) . '  -  ' . $batch_lab_csv : '-') ?></strong>
                         </div>
                         <div class="col-6 col-md-4 col-lg-2">
                             <span class="text-muted d-block" style="font-size:0.75rem;font-weight:600;text-transform:uppercase;">Date &amp; Slot</span>
@@ -440,9 +554,9 @@ if (!empty($batch_enrollments)) {
 
             <!-- Autofill Panel -->
             <?php if (!empty($autofill_records)): ?>
-            <div class="app-card shadow-sm mb-3">
+            <div class="app-card shadow-sm mb-3" style="border: 2px solid #ffc107; border-left: 5px solid #ffc107;">
                 <div class="app-card-body">
-                    <h5 class="mb-2"><i class="bi bi-lightning-charge-fill text-warning me-1"></i>Today's Attendance — Click to Autofill</h5>
+                    <h5 class="mb-2"><i class="bi bi-lightning-charge-fill text-warning me-1"></i>Today's Attendance - Click to Autofill</h5>
                     <p class="text-muted mb-2" style="font-size:0.82rem;">Only students in batch(es) <strong><?= htmlspecialchars(implode(', ', $selected_batches)) ?></strong> will be marked.</p>
                     <div class="d-flex flex-wrap gap-2">
                         <?php
@@ -452,6 +566,7 @@ if (!empty($batch_enrollments)) {
                         ?>
                         <button type="button"
                                 class="btn btn-outline-<?= $color ?> btn-sm autofill-btn"
+                                style="border-width: 2px; font-weight: 500;"
                                 data-present="<?= htmlspecialchars(json_encode($rec['present'])) ?>"
                                 title="<?= htmlspecialchars($rec['label']) ?> (<?= count($rec['present']) ?> students from these batches)">
 
@@ -528,7 +643,7 @@ if (!empty($batch_enrollments)) {
                                             <i class="bi bi-pc-display text-primary me-1"></i>
                                             Total PC Used
                                             <span class="text-muted fw-normal" style="font-size:0.78rem;">
-                                                · half of present: <span id="pcDefaultValue" class="text-primary fw-bold">0</span>
+                                                 -  half of present: <span id="pcDefaultValue" class="text-primary fw-bold">0</span>
                                             </span>
                                         </label>
                                         <input type="number"

@@ -175,7 +175,7 @@ if (!$students_result) {
 }
 $total_students = $students_result->num_rows;
 
-// ── Autofill: today's related attendance records ──────────────────────────────
+// --- Autofill: nearest attendance records (same day -> before -> after) ---
 $tut_enrollments = [];
 if ($total_students > 0) {
     $students_result->data_seek(0);
@@ -186,46 +186,155 @@ if ($total_students > 0) {
 }
 
 $autofill_records = [];
-if (!empty($tut_enrollments)) {
-    $att_date_esc = $conn->real_escape_string($data['date']);
+$att_date = $data['date'];
+$att_date_esc = $conn->real_escape_string($att_date);
 
-    // Lecture records today — filter to students in selected tutorial batches
-    $lec_res = $conn->query("SELECT id, subject, class, time, presentNo FROM lecattendance WHERE term='{$escaped_term}' AND sem='{$escaped_sem}' AND date='{$att_date_esc}' ORDER BY id DESC");
-    if ($lec_res) {
+// 1) SAME DAY records first
+// Lecture records today - filter to students in selected tutorial batches
+$lec_res = $conn->query("SELECT id, subject, class, time, presentNo, date FROM lecattendance WHERE term='{$escaped_term}' AND sem='{$escaped_sem}' AND date='{$att_date_esc}' ORDER BY id DESC");
+if ($lec_res) {
+    while ($row = $lec_res->fetch_assoc()) {
+        $all  = array_filter(array_map('trim', explode(',', (string)$row['presentNo'])));
+        $filt = array_values(array_intersect($all, $tut_enrollments));
+        if (!empty($filt)) {
+            $autofill_records[] = ['type' => 'Lecture', 'label' => 'Lecture - ' . $row['subject'] . ' - Class ' . $row['class'] . ' - ' . $row['time'], 'present' => $filt, 'sort_date' => $row['date'], 'date_order' => 0];
+        }
+    }
+}
+
+// Lab records today - filter to students in selected tutorial batches
+$lab_res = $conn->query("SELECT id, subject, batch, presentNo, date FROM labattendance WHERE term='{$escaped_term}' AND sem='{$escaped_sem}' AND date='{$att_date_esc}' AND labNo IS NOT NULL AND labNo!='' ORDER BY id DESC");
+if ($lab_res) {
+    while ($row = $lab_res->fetch_assoc()) {
+        $all  = array_filter(array_map('trim', explode(',', (string)$row['presentNo'])));
+        $filt = array_values(array_intersect($all, $tut_enrollments));
+        if (!empty($filt)) {
+            $autofill_records[] = ['type' => 'Lab', 'label' => 'Lab - ' . $row['subject'] . ' - Batch ' . $row['batch'], 'present' => $filt, 'sort_date' => $row['date'], 'date_order' => 0];
+        }
+    }
+}
+
+// Other tutorial records today - from tutattendance table
+$tut_res2 = $conn->query("SELECT id, subject, batch, presentNo, date FROM tutattendance WHERE term='{$escaped_term}' AND sem='{$escaped_sem}' AND date='{$att_date_esc}' ORDER BY id DESC");
+if ($tut_res2) {
+    while ($row = $tut_res2->fetch_assoc()) {
+        $all  = array_filter(array_map('trim', explode(',', (string)$row['presentNo'])));
+        $filt = array_values(array_intersect($all, $tut_enrollments));
+        if (!empty($filt)) {
+            $autofill_records[] = ['type' => 'Tutorial', 'label' => 'Tutorial - ' . $row['subject'] . ' - Batch ' . $row['batch'], 'present' => $filt, 'sort_date' => $row['date'], 'date_order' => 0];
+        }
+    }
+}
+
+// 2) PREVIOUS DAYS (going backwards, up to 30 days)
+$prev_found = false;
+for ($i = 1; $i <= 30; $i++) {
+    $prev_date = date('Y-m-d', strtotime($att_date . " -{$i} days"));
+    $prev_date_esc = $conn->real_escape_string($prev_date);
+
+    // Lecture
+    $lec_res = $conn->query("SELECT id, subject, class, time, presentNo, date FROM lecattendance WHERE term='{$escaped_term}' AND sem='{$escaped_sem}' AND date='{$prev_date_esc}' ORDER BY id DESC");
+    if ($lec_res && $lec_res->num_rows > 0) {
+        $prev_found = true;
         while ($row = $lec_res->fetch_assoc()) {
             $all  = array_filter(array_map('trim', explode(',', (string)$row['presentNo'])));
             $filt = array_values(array_intersect($all, $tut_enrollments));
             if (!empty($filt)) {
-                $autofill_records[] = ['type' => 'Lecture', 'label' => 'Lecture · ' . $row['subject'] . ' · Class ' . $row['class'] . ' · ' . $row['time'], 'present' => $filt];
+                $autofill_records[] = ['type' => 'Lecture', 'label' => 'Lecture - ' . $row['subject'] . ' - Class ' . $row['class'] . ' - ' . $row['time'] . ' (' . $prev_date . ')', 'present' => $filt, 'sort_date' => $row['date'], 'date_order' => -$i];
             }
         }
     }
 
-    // Lab records today — filter to students in selected tutorial batches
-    $lab_res = $conn->query("SELECT id, subject, batch, presentNo FROM labattendance WHERE term='{$escaped_term}' AND sem='{$escaped_sem}' AND date='{$att_date_esc}' AND labNo IS NOT NULL AND labNo!='' ORDER BY id DESC");
-    if ($lab_res) {
+    // Lab
+    $lab_res = $conn->query("SELECT id, subject, batch, presentNo, date FROM labattendance WHERE term='{$escaped_term}' AND sem='{$escaped_sem}' AND date='{$prev_date_esc}' AND labNo IS NOT NULL AND labNo!='' ORDER BY id DESC");
+    if ($lab_res && $lab_res->num_rows > 0) {
+        $prev_found = true;
         while ($row = $lab_res->fetch_assoc()) {
             $all  = array_filter(array_map('trim', explode(',', (string)$row['presentNo'])));
             $filt = array_values(array_intersect($all, $tut_enrollments));
             if (!empty($filt)) {
-                $autofill_records[] = ['type' => 'Lab', 'label' => 'Lab · ' . $row['subject'] . ' · Batch ' . $row['batch'], 'present' => $filt];
+                $autofill_records[] = ['type' => 'Lab', 'label' => 'Lab - ' . $row['subject'] . ' - Batch ' . $row['batch'] . ' (' . $prev_date . ')', 'present' => $filt, 'sort_date' => $row['date'], 'date_order' => -$i];
             }
         }
     }
 
-    // Other tutorial records today — from tutattendance table
-    $tut_res2 = $conn->query("SELECT id, subject, batch, presentNo FROM tutattendance WHERE term='{$escaped_term}' AND sem='{$escaped_sem}' AND date='{$att_date_esc}' ORDER BY id DESC");
-    if ($tut_res2) {
+    // Tutorial
+    $tut_res2 = $conn->query("SELECT id, subject, batch, presentNo, date FROM tutattendance WHERE term='{$escaped_term}' AND sem='{$escaped_sem}' AND date='{$prev_date_esc}' ORDER BY id DESC");
+    if ($tut_res2 && $tut_res2->num_rows > 0) {
+        $prev_found = true;
         while ($row = $tut_res2->fetch_assoc()) {
             $all  = array_filter(array_map('trim', explode(',', (string)$row['presentNo'])));
             $filt = array_values(array_intersect($all, $tut_enrollments));
             if (!empty($filt)) {
-                $autofill_records[] = ['type' => 'Tutorial', 'label' => 'Tutorial · ' . $row['subject'] . ' · Batch ' . $row['batch'], 'present' => $filt];
+                $autofill_records[] = ['type' => 'Tutorial', 'label' => 'Tutorial - ' . $row['subject'] . ' - Batch ' . $row['batch'] . ' (' . $prev_date . ')', 'present' => $filt, 'sort_date' => $row['date'], 'date_order' => -$i];
             }
         }
     }
+
+    // Stop if we found records on this day
+    if ($prev_found) break;
 }
-// ─────────────────────────────────────────────────────────────────────────────
+
+// 3) NEXT DAYS (only if no previous records found, going forwards, up to 30 days)
+if (!$prev_found) {
+    for ($i = 1; $i <= 30; $i++) {
+        $next_date = date('Y-m-d', strtotime($att_date . " +{$i} days"));
+        $next_date_esc = $conn->real_escape_string($next_date);
+
+        $found_in_this_day = false;
+
+        // Lecture
+        $lec_res = $conn->query("SELECT id, subject, class, time, presentNo, date FROM lecattendance WHERE term='{$escaped_term}' AND sem='{$escaped_sem}' AND date='{$next_date_esc}' ORDER BY id DESC");
+        if ($lec_res && $lec_res->num_rows > 0) {
+            $found_in_this_day = true;
+            while ($row = $lec_res->fetch_assoc()) {
+                $all  = array_filter(array_map('trim', explode(',', (string)$row['presentNo'])));
+                $filt = array_values(array_intersect($all, $tut_enrollments));
+                if (!empty($filt)) {
+                    $autofill_records[] = ['type' => 'Lecture', 'label' => 'Lecture - ' . $row['subject'] . ' - Class ' . $row['class'] . ' - ' . $row['time'] . ' (' . $next_date . ')', 'present' => $filt, 'sort_date' => $row['date'], 'date_order' => $i];
+                }
+            }
+        }
+
+        // Lab
+        $lab_res = $conn->query("SELECT id, subject, batch, presentNo, date FROM labattendance WHERE term='{$escaped_term}' AND sem='{$escaped_sem}' AND date='{$next_date_esc}' AND labNo IS NOT NULL AND labNo!='' ORDER BY id DESC");
+        if ($lab_res && $lab_res->num_rows > 0) {
+            $found_in_this_day = true;
+            while ($row = $lab_res->fetch_assoc()) {
+                $all  = array_filter(array_map('trim', explode(',', (string)$row['presentNo'])));
+                $filt = array_values(array_intersect($all, $tut_enrollments));
+                if (!empty($filt)) {
+                    $autofill_records[] = ['type' => 'Lab', 'label' => 'Lab - ' . $row['subject'] . ' - Batch ' . $row['batch'] . ' (' . $next_date . ')', 'present' => $filt, 'sort_date' => $row['date'], 'date_order' => $i];
+                }
+            }
+        }
+
+        // Tutorial
+        $tut_res2 = $conn->query("SELECT id, subject, batch, presentNo, date FROM tutattendance WHERE term='{$escaped_term}' AND sem='{$escaped_sem}' AND date='{$next_date_esc}' ORDER BY id DESC");
+        if ($tut_res2 && $tut_res2->num_rows > 0) {
+            $found_in_this_day = true;
+            while ($row = $tut_res2->fetch_assoc()) {
+                $all  = array_filter(array_map('trim', explode(',', (string)$row['presentNo'])));
+                $filt = array_values(array_intersect($all, $tut_enrollments));
+                if (!empty($filt)) {
+                    $autofill_records[] = ['type' => 'Tutorial', 'label' => 'Tutorial - ' . $row['subject'] . ' - Batch ' . $row['batch'] . ' (' . $next_date . ')', 'present' => $filt, 'sort_date' => $row['date'], 'date_order' => $i];
+                }
+            }
+        }
+
+        // Stop if we found records on this day
+        if ($found_in_this_day) break;
+    }
+}
+
+// Sort: same day first, then by date_order (nearest first)
+usort($autofill_records, function($a, $b) {
+    if ($a['date_order'] != $b['date_order']) {
+        return abs($a['date_order']) - abs($b['date_order']);
+    }
+    return 0;
+});
+// -------------------------------------------------------------------------
 ?>
 
 <!DOCTYPE html>
@@ -256,8 +365,9 @@ if (!empty($tut_enrollments)) {
 
             <!-- Autofill Panel -->
             <?php if (!empty($autofill_records)): ?>
-            <div class="app-card app-card-body shadow-sm mb-4">
-                <h5 class="mb-2"><i class="bi bi-lightning-charge-fill text-warning me-1"></i>Today's Attendance — Click to Autofill</h5>
+            <div class="app-card shadow-sm mb-4" style="border: 2px solid #ffc107; border-left: 5px solid #ffc107;">
+                <div class="app-card-body">
+                    <h5 class="mb-2"><i class="bi bi-lightning-charge-fill text-warning me-1"></i>Today's Attendance - Click to Autofill</h5>
                 <p class="text-muted mb-2" style="font-size:0.82rem;">Only students in tutorial batch(es) <strong><?= htmlspecialchars(implode(', ', $selected_tut_batches)) ?></strong> will be marked.</p>
                 <div class="d-flex flex-wrap gap-2">
                     <?php
@@ -267,13 +377,14 @@ if (!empty($tut_enrollments)) {
                     ?>
                     <button type="button"
                             class="btn btn-outline-<?= $color ?> btn-sm autofill-btn"
+                            style="border-width: 2px; font-weight: 500;"
                             data-present="<?= htmlspecialchars(json_encode($rec['present'])) ?>"
                             title="<?= htmlspecialchars($rec['label']) ?> (<?= count($rec['present']) ?> students from these batches)">
-                        
                         <?= htmlspecialchars($rec['label']) ?>
                         <span class="badge bg-<?= $color ?> ms-1"><?= count($rec['present']) ?></span>
                     </button>
                     <?php endforeach; ?>
+                    </div>
                 </div>
             </div>
             <?php endif; ?>
