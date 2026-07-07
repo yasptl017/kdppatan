@@ -94,7 +94,7 @@ if ($type === 'lecture') {
     $stmt = $conn->prepare("SELECT id, date, CURDATE() AS logdate, time, term, faculty, sem, subject, batch, '' AS labNo, presentNo, '' AS totalPcUsed, '' AS absentNo, '' AS description FROM tutattendance WHERE id = ?");
     $stmt->bind_param('i', $id);
 } else {
-    $stmt = $conn->prepare("SELECT id, date, logdate, time, term, faculty, sem, subject, batch, labNo, presentNo, totalPcUsed, '' AS absentNo, '' AS description FROM labattendance WHERE id = ?");
+    $stmt = $conn->prepare("SELECT id, date, logdate, time, term, faculty, sem, subject, batch, labNo, presentNo, totalPcUsed, '' AS absentNo, COALESCE(description, '') AS description FROM labattendance WHERE id = ?");
     $stmt->bind_param('i', $id);
 }
 $stmt->execute();
@@ -191,6 +191,7 @@ if ($type !== 'lecture') {
 $group_label = ($type === 'lecture') ? 'Class' : (($type === 'tutorial') ? 'Tutorial Batch' : 'Batch');
 $page_title = ($type === 'lecture') ? 'Lecture Attendance Summary' : (($type === 'tutorial') ? 'Tutorial Attendance Summary' : 'Lab Attendance Summary');
 $back_url = ($type === 'lecture') ? 'lecAttendance.php' : (($type === 'tutorial') ? 'tutAttendance.php' : 'labAttendance.php');
+$my_attendance_url = 'myAttendance.php?' . http_build_query(['term' => $record['term']]);
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -210,8 +211,8 @@ $back_url = ($type === 'lecture') ? 'lecAttendance.php' : (($type === 'tutorial'
                     <a href="<?= $edit_page[$type] ?>?id=<?= $id ?>" class="btn btn-outline-primary">
                         <i class="bi bi-pencil me-1"></i>Edit Attendance
                     </a>
-                    <a href="<?= htmlspecialchars($back_url); ?>" class="btn btn-outline-secondary">
-                        <i class="bi bi-arrow-left me-1"></i>Back
+                    <a href="<?= htmlspecialchars($my_attendance_url); ?>" class="btn btn-success">
+                        <i class="bi bi-calendar-check me-1"></i>My Attendance
                     </a>
                 </div>
             </div>
@@ -239,7 +240,7 @@ $back_url = ($type === 'lecture') ? 'lecAttendance.php' : (($type === 'tutorial'
                         <div class="col-6 col-md-3"><strong>Date:</strong> <?= htmlspecialchars($record['date']); ?></div>
                         <div class="col-6 col-md-3"><strong>Slot:</strong> <?= htmlspecialchars($record['time']); ?></div>
                         <div class="col-6 col-md-3"><strong>Log Date:</strong> <?= htmlspecialchars((string)$record['logdate']); ?></div>
-                        <?php if ($type === 'lecture'): ?>
+                        <?php if ($type !== 'tutorial'): ?>
                             <div class="col-12 col-md-6">
                                 <strong>Description:</strong>
                                 <?= ($record['description'] !== '') ? htmlspecialchars($record['description']) : '<span class="text-muted">-</span>'; ?>
