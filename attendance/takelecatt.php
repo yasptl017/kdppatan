@@ -13,6 +13,28 @@ function short_name($full_name) {
     return $full_name;
 }
 
+function attendance_csv_tokens($csv): array {
+    $tokens = [];
+    foreach (explode(',', (string)$csv) as $raw_token) {
+        $token = trim($raw_token);
+        if ($token !== '') {
+            $tokens[] = $token;
+        }
+    }
+    return $tokens;
+}
+
+function attendance_present_set($presentNo, array $id_to_enrollment): array {
+    $set = [];
+    foreach (attendance_csv_tokens($presentNo) as $token) {
+        if (isset($id_to_enrollment[$token])) {
+            $token = $id_to_enrollment[$token];
+        }
+        $set[$token] = true;
+    }
+    return $set;
+}
+
 function lecture_column_exists(mysqli $conn, string $column): bool {
     $stmt = $conn->prepare("SELECT 1 FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'lecattendance' AND COLUMN_NAME = ? LIMIT 1");
     if (!$stmt) {
@@ -117,11 +139,13 @@ $lecture_sem_esc     = $conn->real_escape_string($data['sem'] ?? '');
 $lecture_class_esc   = $conn->real_escape_string($data['class'] ?? '');
 if ($lecture_subject_esc !== '' && $lecture_term_esc !== '' && $lecture_sem_esc !== '' && $lecture_class_esc !== '' && $total_students > 0) {
     $class_enrollments = [];
+    $id_to_enrollment = [];
     $students_result->data_seek(0);
     while ($s = $students_result->fetch_assoc()) {
         $enr = trim((string)($s['enrollmentNo'] ?? ''));
         if ($enr !== '') {
             $class_enrollments[] = $enr;
+            $id_to_enrollment[(string)$s['id']] = $enr;
         }
     }
     $students_result->data_seek(0);
@@ -131,10 +155,10 @@ if ($lecture_subject_esc !== '' && $lecture_term_esc !== '' && $lecture_sem_esc 
         $student_total = [];
         $student_present = [];
         while ($prow = $pct_res->fetch_assoc()) {
-            $present_arr = array_filter(array_map('trim', explode(',', (string)($prow['presentNo'] ?? ''))));
+            $present_set = attendance_present_set($prow['presentNo'] ?? '', $id_to_enrollment);
             foreach ($class_enrollments as $enr) {
                 $student_total[$enr] = ($student_total[$enr] ?? 0) + 1;
-                if (in_array($enr, $present_arr, true)) {
+                if (isset($present_set[$enr])) {
                     $student_present[$enr] = ($student_present[$enr] ?? 0) + 1;
                 }
             }

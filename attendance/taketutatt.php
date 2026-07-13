@@ -28,6 +28,42 @@ function short_name($full_name) {
     return $full_name;
 }
 
+function attendance_csv_tokens($csv): array {
+    $tokens = [];
+    foreach (explode(',', (string)$csv) as $raw_token) {
+        $token = trim($raw_token);
+        if ($token !== '') {
+            $tokens[] = $token;
+        }
+    }
+    return $tokens;
+}
+
+function attendance_present_set($presentNo, array $id_to_enrollment): array {
+    $set = [];
+    foreach (attendance_csv_tokens($presentNo) as $token) {
+        if (isset($id_to_enrollment[$token])) {
+            $token = $id_to_enrollment[$token];
+        }
+        $set[$token] = true;
+    }
+    return $set;
+}
+
+function attendance_batch_tokens($batchCsv): array {
+    $tokens = [];
+    foreach (attendance_csv_tokens($batchCsv) as $batch) {
+        $normalized = strtoupper(str_replace(' ', '', $batch));
+        if ($normalized !== '') {
+            $tokens[$normalized] = true;
+        }
+        if (strpos($normalized, ':') !== false) {
+            $tokens[strtok($normalized, ':')] = true;
+        }
+    }
+    return $tokens;
+}
+
 function render_hidden_inputs($name, $value) {
     if (is_array($value)) {
         foreach ($value as $key => $item) {
@@ -195,11 +231,13 @@ $tut_term_esc    = $conn->real_escape_string($data['term'] ?? '');
 $tut_sem_esc     = $conn->real_escape_string($data['sem'] ?? '');
 if ($tut_subject_esc !== '' && $tut_term_esc !== '' && $tut_sem_esc !== '' && !empty($selected_tut_batches_normalized) && $total_students > 0) {
     $enr_batch_map = [];
+    $id_to_enrollment = [];
     $students_result->data_seek(0);
     while ($s = $students_result->fetch_assoc()) {
         $enr = trim((string)($s['enrollmentNo'] ?? ''));
         if ($enr !== '') {
-            $enr_batch_map[$enr] = strtoupper(trim((string)$s['tutBatch']));
+            $enr_batch_map[$enr] = strtoupper(str_replace(' ', '', (string)$s['tutBatch']));
+            $id_to_enrollment[(string)$s['id']] = $enr;
         }
     }
     $students_result->data_seek(0);
@@ -209,14 +247,14 @@ if ($tut_subject_esc !== '' && $tut_term_esc !== '' && $tut_sem_esc !== '' && !e
         $student_total = [];
         $student_present = [];
         while ($prow = $pct_res->fetch_assoc()) {
-            $row_batches = array_map('strtoupper', array_filter(array_map('trim', explode(',', (string)($prow['batch'] ?? '')))));
-            $present_arr = array_filter(array_map('trim', explode(',', (string)($prow['presentNo'] ?? ''))));
+            $row_batches = attendance_batch_tokens($prow['batch'] ?? '');
+            $present_set = attendance_present_set($prow['presentNo'] ?? '', $id_to_enrollment);
             foreach ($enr_batch_map as $enr => $eb) {
-                if (!in_array($eb, $row_batches, true)) {
+                if (!isset($row_batches[$eb])) {
                     continue;
                 }
                 $student_total[$enr] = ($student_total[$enr] ?? 0) + 1;
-                if (in_array($enr, $present_arr, true)) {
+                if (isset($present_set[$enr])) {
                     $student_present[$enr] = ($student_present[$enr] ?? 0) + 1;
                 }
             }
