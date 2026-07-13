@@ -12,10 +12,26 @@ $filter_term    = trim((string)($_REQUEST['term'] ?? ''));
 $filter_sem     = trim((string)($_REQUEST['sem'] ?? ''));
 $filter_subject = trim((string)($_REQUEST['subject'] ?? ''));
 $filter_date    = trim((string)($_REQUEST['date'] ?? ''));
-$filter_faculty = trim((string)($_REQUEST['faculty'] ?? ''));
+// Faculty filter is auto-enforced from session — no longer user-configurable
 
 $success_msg = trim((string)($_GET['success'] ?? ''));
 $error_msg   = trim((string)($_GET['error'] ?? ''));
+
+// Resolve logged-in faculty ID from session username
+$logged_in_faculty_id = 0;
+$session_username = trim((string)($_SESSION['username'] ?? ''));
+if ($session_username !== '') {
+    $facLookup = $conn->prepare("SELECT id FROM faculty WHERE username = ? LIMIT 1");
+    if ($facLookup) {
+        $facLookup->bind_param('s', $session_username);
+        $facLookup->execute();
+        $facRow = $facLookup->get_result()->fetch_assoc();
+        if ($facRow) {
+            $logged_in_faculty_id = (int)$facRow['id'];
+        }
+        $facLookup->close();
+    }
+}
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['delete_attendance'])) {
     $delete_id   = (int)($_POST['delete_id'] ?? 0);
@@ -32,7 +48,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['delete_attendance']))
         'sem'     => $filter_sem,
         'subject' => $filter_subject,
         'date'    => $filter_date,
-        'faculty' => $filter_faculty,
     ];
 
     if (!isset($table_map[$delete_type]) || $delete_id <= 0) {
@@ -41,9 +56,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['delete_attendance']))
         exit();
     }
 
+    if ($logged_in_faculty_id <= 0) {
+        $redirect_params['error'] = 'Unable to verify faculty identity.';
+        header('Location: editAttendance.php?' . http_build_query($redirect_params));
+        exit();
+    }
+
     $table = $table_map[$delete_type];
-    $stmt  = $conn->prepare("DELETE FROM {$table} WHERE id = ?");
-    $stmt->bind_param('i', $delete_id);
+    // Verify ownership before deleting
+    $stmt  = $conn->prepare("DELETE FROM {$table} WHERE id = ? AND faculty = ?");
+    $stmt->bind_param('ii', $delete_id, $logged_in_faculty_id);
     $ok = $stmt->execute();
     $affected = $stmt->affected_rows;
     $stmt->close();
@@ -57,16 +79,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['delete_attendance']))
     exit();
 }
 
-// Build query
+// Build query — always restrict to logged-in faculty's records
 if ($type === 'lecture') {
-    $where  = ['1=1'];
-    $params = [];
-    $types  = '';
+    $where  = ['faculty = ?'];
+    $params = [$logged_in_faculty_id];
+    $types  = 'i';
     if ($filter_term !== '')    { $where[] = 'term = ?';    $params[] = $filter_term;    $types .= 's'; }
     if ($filter_sem !== '')     { $where[] = 'sem = ?';     $params[] = $filter_sem;     $types .= 's'; }
     if ($filter_subject !== '') { $where[] = 'subject = ?'; $params[] = $filter_subject; $types .= 's'; }
     if ($filter_date !== '')    { $where[] = 'date = ?';    $params[] = $filter_date;    $types .= 's'; }
-    if ($filter_faculty !== '') { $where[] = 'faculty = ?'; $params[] = $filter_faculty; $types .= 's'; }
 
     $sql  = "SELECT id, date, time, term, faculty, sem, subject, class, presentNo FROM lecattendance WHERE " . implode(' AND ', $where) . " ORDER BY date DESC, id DESC";
     $stmt = $conn->prepare($sql);
@@ -78,14 +99,13 @@ if ($type === 'lecture') {
     $stmt->close();
 } elseif ($type === 'tutorial') {
     // Tutorial uses its own tutattendance table
-    $where  = ['1=1'];
-    $params = [];
-    $types  = '';
+    $where  = ['faculty = ?'];
+    $params = [$logged_in_faculty_id];
+    $types  = 'i';
     if ($filter_term !== '')    { $where[] = 'term = ?';    $params[] = $filter_term;    $types .= 's'; }
     if ($filter_sem !== '')     { $where[] = 'sem = ?';     $params[] = $filter_sem;     $types .= 's'; }
     if ($filter_subject !== '') { $where[] = 'subject = ?'; $params[] = $filter_subject; $types .= 's'; }
     if ($filter_date !== '')    { $where[] = 'date = ?';    $params[] = $filter_date;    $types .= 's'; }
-    if ($filter_faculty !== '') { $where[] = 'faculty = ?'; $params[] = $filter_faculty; $types .= 's'; }
 
     $sql  = "SELECT id, date, time, term, faculty, sem, subject, batch, presentNo FROM tutattendance WHERE " . implode(' AND ', $where) . " ORDER BY date DESC, id DESC";
     $stmt = $conn->prepare($sql);
@@ -97,14 +117,13 @@ if ($type === 'lecture') {
     $stmt->close();
 } else {
     // lab uses labattendance (with labNo present)
-    $where  = ['1=1', "labNo IS NOT NULL AND labNo != ''"];
-    $params = [];
-    $types  = '';
+    $where  = ['faculty = ?', "labNo IS NOT NULL AND labNo != ''"];
+    $params = [$logged_in_faculty_id];
+    $types  = 'i';
     if ($filter_term !== '')    { $where[] = 'term = ?';    $params[] = $filter_term;    $types .= 's'; }
     if ($filter_sem !== '')     { $where[] = 'sem = ?';     $params[] = $filter_sem;     $types .= 's'; }
     if ($filter_subject !== '') { $where[] = 'subject = ?'; $params[] = $filter_subject; $types .= 's'; }
     if ($filter_date !== '')    { $where[] = 'date = ?';    $params[] = $filter_date;    $types .= 's'; }
-    if ($filter_faculty !== '') { $where[] = 'faculty = ?'; $params[] = $filter_faculty; $types .= 's'; }
 
     $sql  = "SELECT id, date, time, term, faculty, sem, subject, batch, labNo, presentNo FROM labattendance WHERE " . implode(' AND ', $where) . " ORDER BY date DESC, id DESC";
     $stmt = $conn->prepare($sql);
@@ -179,15 +198,11 @@ $edit_page = ['lecture' => 'editlecatt.php', 'lab' => 'editlabatt.php', 'tutoria
                             <label class="form-label form-label-sm mb-1">Subject</label>
                             <input type="text" name="subject" class="form-control form-control-sm" value="<?= htmlspecialchars($filter_subject) ?>" placeholder="Subject code">
                         </div>
-                        <div class="col-6 col-md-2">
+                        <div class="col-6 col-md-3">
                             <label class="form-label form-label-sm mb-1">Date</label>
                             <input type="date" name="date" class="form-control form-control-sm" value="<?= htmlspecialchars($filter_date) ?>">
                         </div>
-                        <div class="col-6 col-md-2">
-                            <label class="form-label form-label-sm mb-1">Faculty ID</label>
-                            <input type="text" name="faculty" class="form-control form-control-sm" value="<?= htmlspecialchars($filter_faculty) ?>" placeholder="Faculty ID">
-                        </div>
-                        <div class="col-6 col-md-2 d-flex gap-1">
+                        <div class="col-6 col-md-3 d-flex gap-1">
                             <button type="submit" class="btn btn-primary btn-sm flex-fill">
                                 <i class="bi bi-search me-1"></i>Filter
                             </button>
@@ -196,6 +211,9 @@ $edit_page = ['lecture' => 'editlecatt.php', 'lab' => 'editlabatt.php', 'tutoria
                             </a>
                         </div>
                     </form>
+                    <p class="text-muted mb-0 mt-2" style="font-size:0.8rem;">
+                        <i class="bi bi-info-circle me-1"></i>Only showing your attendance records.
+                    </p>
                 </div>
             </div>
 
@@ -257,7 +275,6 @@ $edit_page = ['lecture' => 'editlecatt.php', 'lab' => 'editlabatt.php', 'tutoria
                                                         <input type="hidden" name="sem" value="<?= htmlspecialchars($filter_sem) ?>">
                                                         <input type="hidden" name="subject" value="<?= htmlspecialchars($filter_subject) ?>">
                                                         <input type="hidden" name="date" value="<?= htmlspecialchars($filter_date) ?>">
-                                                        <input type="hidden" name="faculty" value="<?= htmlspecialchars($filter_faculty) ?>">
                                                         <button type="submit" class="btn btn-sm btn-outline-danger">
                                                             <i class="bi bi-trash me-1"></i>Delete
                                                         </button>
@@ -271,7 +288,7 @@ $edit_page = ['lecture' => 'editlecatt.php', 'lab' => 'editlabatt.php', 'tutoria
                         </div>
                     <?php else: ?>
                         <div class="alert alert-info mb-0">
-                            <i class="bi bi-info-circle me-1"></i>No <?= htmlspecialchars($type) ?> attendance records found. Use filters above to narrow down.
+                            <i class="bi bi-info-circle me-1"></i>No <?= htmlspecialchars($type) ?> attendance records found for your account.
                         </div>
                     <?php endif; ?>
                 </div>

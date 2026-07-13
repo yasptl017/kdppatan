@@ -27,6 +27,25 @@ if (!$record) {
     exit();
 }
 
+// Verify ownership: only the faculty who created this record can edit it
+$session_username = trim((string)($_SESSION['username'] ?? ''));
+$logged_in_faculty_id = 0;
+if ($session_username !== '') {
+    $facLookup = $conn->prepare("SELECT id FROM faculty WHERE username = ? LIMIT 1");
+    if ($facLookup) {
+        $facLookup->bind_param('s', $session_username);
+        $facLookup->execute();
+        $facRow = $facLookup->get_result()->fetch_assoc();
+        if ($facRow) $logged_in_faculty_id = (int)$facRow['id'];
+        $facLookup->close();
+    }
+}
+if ($logged_in_faculty_id <= 0 || (int)$record['faculty'] !== $logged_in_faculty_id) {
+    http_response_code(403);
+    echo 'Access denied. You can only edit your own attendance records.';
+    exit();
+}
+
 $success_msg = '';
 $error_msg   = '';
 
