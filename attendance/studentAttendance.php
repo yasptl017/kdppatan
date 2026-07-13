@@ -127,8 +127,8 @@ function build_term_summary(mysqli $conn, array $studentRecord) {
     if ($tutBatch !== '') {
         $tutSql = "SELECT subject,
                    CASE WHEN (FIND_IN_SET(?, REPLACE(presentNo, ' ', '')) > 0 OR FIND_IN_SET(?, REPLACE(presentNo, ' ', '')) > 0) THEN 'P' ELSE 'A' END AS status
-                   FROM labattendance
-                   WHERE term = ? AND sem = ? AND COALESCE(TRIM(labNo), '') = ''
+                   FROM tutattendance
+                   WHERE term = ? AND sem = ?
                      AND FIND_IN_SET(?, REPLACE(UPPER(batch), ' ', '')) > 0
                    ORDER BY COALESCE(logdate, '0000-00-00') ASC, id ASC";
         $tutStmt = $conn->prepare($tutSql);

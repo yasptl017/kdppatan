@@ -282,7 +282,7 @@ if ($hasFilterInput) {
                 }
                 $labStmt->close();
 
-                $tutStmt = $conn->prepare("SELECT date, batch, presentNo FROM labattendance WHERE sem = ? AND COALESCE(TRIM(labNo), '') = '' ORDER BY id ASC");
+                $tutStmt = $conn->prepare("SELECT date, batch, presentNo FROM tutattendance WHERE sem = ? ORDER BY id ASC");
                 $tutStmt->bind_param('s', $sem);
                 $tutStmt->execute();
                 $tutRes = $tutStmt->get_result();
