@@ -250,13 +250,34 @@ foreach ($pending_slots as $slot) {
 <!DOCTYPE html>
 <html lang="en">
 <?php include('head.php'); ?>
+<style>
+    @media print {
+        .app-header, .app-sidepanel, .sidepanel-drop, #sidepanel-drop,
+        .app-content > .container-xl > .app-card:first-of-type,
+        .no-print { display: none !important; }
+        .app-wrapper { padding: 0; margin: 0; }
+        .app-content { padding: 0 !important; }
+        .container-xl { max-width: 100%; padding: 0.5rem; }
+        .app-card { box-shadow: none !important; border: 1px solid #dee2e6 !important; break-inside: avoid; }
+        .app-page-title { font-size: 1.3rem; margin-bottom: 0.5rem; }
+        .badge { border: 1px solid currentColor; }
+        body { background: #fff !important; }
+    }
+</style>
 <body class="app">
 <?php include('header.php'); ?>
 
 <div class="app-wrapper">
     <div class="app-content pt-3 p-md-3 p-lg-4">
         <div class="container-xl">
-            <h1 class="app-page-title"><i class="bi bi-hourglass-split me-2"></i>Pending Attendance</h1>
+            <div class="d-flex justify-content-between align-items-center mb-3">
+                <h1 class="app-page-title mb-0"><i class="bi bi-hourglass-split me-2"></i>Pending Attendance</h1>
+                <?php if (!empty($pending_slots)): ?>
+                    <button type="button" class="btn btn-outline-secondary btn-sm no-print" onclick="window.print();">
+                        <i class="bi bi-printer me-1"></i>Print
+                    </button>
+                <?php endif; ?>
+            </div>
 
             <!-- Filter -->
             <div class="app-card shadow-sm mb-3">
