@@ -246,22 +246,219 @@ foreach ($pending_slots as $slot) {
     if (!isset($grouped[$fac_id])) $grouped[$fac_id] = [];
     $grouped[$fac_id][] = $slot;
 }
+
+// Stats per type
+$type_counts = ['lecture' => 0, 'lab' => 0, 'tutorial' => 0];
+foreach ($pending_slots as $slot) {
+    $type_counts[$slot['mapping_type']] = ($type_counts[$slot['mapping_type']] ?? 0) + 1;
+}
+
+$dow_names = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 ?>
 <!DOCTYPE html>
 <html lang="en">
 <?php include('head.php'); ?>
 <style>
+    .stat-card {
+        border: none;
+        border-radius: 0.75rem;
+        overflow: hidden;
+        transition: transform 0.15s;
+    }
+    .stat-card:hover { transform: translateY(-2px); }
+    .stat-card-inner {
+        display: flex;
+        align-items: center;
+        gap: 1rem;
+        padding: 1.1rem 1.2rem;
+        background: #fff;
+    }
+    .stat-icon {
+        width: 48px;
+        height: 48px;
+        border-radius: 0.65rem;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 1.4rem;
+        flex-shrink: 0;
+    }
+    .stat-info { flex: 1; }
+    .stat-label {
+        font-size: 0.72rem;
+        font-weight: 600;
+        text-transform: uppercase;
+        letter-spacing: 0.4px;
+        color: #64748b;
+        margin-bottom: 0.15rem;
+    }
+    .stat-value {
+        font-size: 1.55rem;
+        font-weight: 800;
+        line-height: 1.2;
+    }
+    .stat-card .stat-bottom {
+        height: 4px;
+    }
+
+    .faculty-card {
+        border: 1px solid #e2e8f0;
+        border-left: 4px solid #6366f1;
+        border-radius: 0.75rem;
+        overflow: hidden;
+    }
+    .faculty-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 0.85rem 1.2rem;
+        background: linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%);
+        border-bottom: 1px solid #e2e8f0;
+    }
+    .faculty-name {
+        font-size: 1rem;
+        font-weight: 700;
+        color: #1e293b;
+    }
+    .faculty-id {
+        font-size: 0.78rem;
+        color: #94a3b8;
+        margin-left: 0.4rem;
+    }
+    .pending-badge {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.3rem;
+        padding: 0.25rem 0.7rem;
+        border-radius: 2rem;
+        font-size: 0.78rem;
+        font-weight: 700;
+        background: #fef2f2;
+        color: #dc2626;
+        border: 1px solid #fecaca;
+    }
+    .pending-badge i { font-size: 0.7rem; }
+
+    .slot-table { margin-bottom: 0; }
+    .slot-table thead th {
+        background: #f8fafc;
+        font-size: 0.72rem;
+        font-weight: 700;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+        color: #64748b;
+        padding: 0.6rem 0.8rem;
+        border-bottom: 2px solid #e2e8f0;
+    }
+    .slot-table tbody td {
+        padding: 0.55rem 0.8rem;
+        font-size: 0.85rem;
+        vertical-align: middle;
+        border-bottom: 1px solid #f1f5f9;
+    }
+    .slot-table tbody tr:last-child td { border-bottom: none; }
+    .slot-table tbody tr:hover { background: #f8fafc; }
+
+    .date-cell {
+        font-weight: 700;
+        color: #1e293b;
+    }
+    .dow-label {
+        display: inline-block;
+        font-size: 0.68rem;
+        font-weight: 600;
+        color: #6366f1;
+        background: #eef2ff;
+        padding: 0.1rem 0.35rem;
+        border-radius: 0.25rem;
+        margin-left: 0.3rem;
+    }
+    .type-pill {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.25rem;
+        padding: 0.2rem 0.55rem;
+        border-radius: 2rem;
+        font-size: 0.75rem;
+        font-weight: 600;
+    }
+    .type-lecture { background: #eff6ff; color: #2563eb; }
+    .type-lab     { background: #fef2f2; color: #dc2626; }
+    .type-tutorial { background: #f0fdf4; color: #16a34a; }
+
+    .empty-state {
+        text-align: center;
+        padding: 3rem 1rem;
+    }
+    .empty-state .icon {
+        width: 72px;
+        height: 72px;
+        border-radius: 50%;
+        background: #f0fdf4;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        margin: 0 auto 1rem;
+        font-size: 2rem;
+        color: #16a34a;
+    }
+    .empty-state h5 { font-weight: 700; color: #1e293b; }
+    .empty-state p { color: #64748b; font-size: 0.9rem; }
+
+    /* ── Print ──────────────────────────────────────────────── */
+    .print-header { display: none; }
     @media print {
+        .no-print,
         .app-header, .app-sidepanel, .sidepanel-drop, #sidepanel-drop,
-        .app-content > .container-xl > .app-card:first-of-type,
-        .no-print { display: none !important; }
+        .app-sidepanel-footer,
+        .stat-card:hover { transform: none; }
+        .filter-card { display: none !important; }
+
+        body { background: #fff !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
         .app-wrapper { padding: 0; margin: 0; }
         .app-content { padding: 0 !important; }
-        .container-xl { max-width: 100%; padding: 0.5rem; }
-        .app-card { box-shadow: none !important; border: 1px solid #dee2e6 !important; break-inside: avoid; }
-        .app-page-title { font-size: 1.3rem; margin-bottom: 0.5rem; }
-        .badge { border: 1px solid currentColor; }
-        body { background: #fff !important; }
+        .container-xl { max-width: 100%; padding: 0 0.5rem; }
+
+        .print-header {
+            display: block;
+            text-align: center;
+            padding: 0.8rem 0 0.6rem;
+            border-bottom: 2px solid #1e293b;
+            margin-bottom: 1rem;
+        }
+        .print-header h2 {
+            font-size: 1.25rem;
+            font-weight: 800;
+            margin: 0;
+            color: #1e293b;
+        }
+        .print-header .sub {
+            font-size: 0.82rem;
+            color: #64748b;
+            margin-top: 0.2rem;
+        }
+
+        .stat-card { box-shadow: none !important; border: 1px solid #e2e8f0 !important; break-inside: avoid; }
+        .stat-card .stat-bottom { height: 3px; }
+        .stat-icon { width: 36px; height: 36px; font-size: 1rem; }
+        .stat-value { font-size: 1.2rem; }
+
+        .faculty-card { break-inside: avoid; box-shadow: none !important; border: 1px solid #cbd5e1 !important; margin-bottom: 0.8rem; }
+        .faculty-header { background: #f1f5f9 !important; padding: 0.6rem 1rem; }
+        .slot-table thead th { background: #f1f5f9 !important; padding: 0.4rem 0.6rem; font-size: 0.68rem; }
+        .slot-table tbody td { padding: 0.35rem 0.6rem; font-size: 0.8rem; }
+        .dow-label { background: #e2e8f0 !important; }
+        .type-lecture { background: #dbeafe !important; }
+        .type-lab     { background: #fee2e2 !important; }
+        .type-tutorial { background: #dcfce7 !important; }
+        .pending-badge { background: #fee2e2 !important; border-color: #fca5a5 !important; }
+
+        .filter-card { display: none !important; }
+
+        @page {
+            size: A4;
+            margin: 1cm;
+        }
     }
 </style>
 <body class="app">
@@ -270,17 +467,25 @@ foreach ($pending_slots as $slot) {
 <div class="app-wrapper">
     <div class="app-content pt-3 p-md-3 p-lg-4">
         <div class="container-xl">
-            <div class="d-flex justify-content-between align-items-center mb-3">
+
+            <!-- Print-only header -->
+            <div class="print-header">
+                <h2><i class="bi bi-hourglass-split me-1"></i>Pending Attendance Report</h2>
+                <div class="sub">Term: <?= htmlspecialchars($filter_term) ?> &middot; Up to: <?= $today->format('d M Y') ?> &middot; Generated: <?= (new DateTime())->format('d M Y h:i A') ?></div>
+            </div>
+
+            <!-- Title row -->
+            <div class="d-flex justify-content-between align-items-center mb-3 no-print">
                 <h1 class="app-page-title mb-0"><i class="bi bi-hourglass-split me-2"></i>Pending Attendance</h1>
                 <?php if (!empty($pending_slots)): ?>
-                    <button type="button" class="btn btn-outline-secondary btn-sm no-print" onclick="window.print();">
+                    <button type="button" class="btn btn-outline-secondary btn-sm" onclick="window.print();">
                         <i class="bi bi-printer me-1"></i>Print
                     </button>
                 <?php endif; ?>
             </div>
 
             <!-- Filter -->
-            <div class="app-card shadow-sm mb-3">
+            <div class="app-card shadow-sm mb-3 filter-card no-print">
                 <div class="app-card-body">
                     <form method="GET" action="pendingAttendance.php" class="row g-2 align-items-end">
                         <div class="col-6 col-md-3">
@@ -300,90 +505,155 @@ foreach ($pending_slots as $slot) {
                 </div>
             </div>
 
-            <!-- Summary -->
-            <div class="row g-2 mb-3">
+            <!-- Summary stat cards -->
+            <div class="row g-3 mb-4">
                 <div class="col-6 col-md-3">
-                    <div class="app-card shadow-sm">
-                        <div class="app-card-body text-center py-3">
-                            <div class="text-muted" style="font-size:0.75rem;text-transform:uppercase;font-weight:600;">Total Pending</div>
-                            <div style="font-size:1.8rem;font-weight:700;color:#dc3545;"><?= count($pending_slots) ?></div>
+                    <div class="stat-card shadow-sm">
+                        <div class="stat-card-inner">
+                            <div class="stat-icon" style="background:#fef2f2;color:#dc2626;">
+                                <i class="bi bi-exclamation-triangle"></i>
+                            </div>
+                            <div class="stat-info">
+                                <div class="stat-label">Total Pending</div>
+                                <div class="stat-value" style="color:#dc2626;"><?= count($pending_slots) ?></div>
+                            </div>
                         </div>
+                        <div class="stat-bottom" style="background: linear-gradient(90deg, #dc2626, #f87171);"></div>
                     </div>
                 </div>
                 <div class="col-6 col-md-3">
-                    <div class="app-card shadow-sm">
-                        <div class="app-card-body text-center py-3">
-                            <div class="text-muted" style="font-size:0.75rem;text-transform:uppercase;font-weight:600;">Faculties</div>
-                            <div style="font-size:1.8rem;font-weight:700;color:#0d6efd;"><?= count($grouped) ?></div>
+                    <div class="stat-card shadow-sm">
+                        <div class="stat-card-inner">
+                            <div class="stat-icon" style="background:#eff6ff;color:#2563eb;">
+                                <i class="bi bi-people"></i>
+                            </div>
+                            <div class="stat-info">
+                                <div class="stat-label">Faculties</div>
+                                <div class="stat-value" style="color:#2563eb;"><?= count($grouped) ?></div>
+                            </div>
                         </div>
+                        <div class="stat-bottom" style="background: linear-gradient(90deg, #2563eb, #60a5fa);"></div>
                     </div>
                 </div>
                 <div class="col-6 col-md-3">
-                    <div class="app-card shadow-sm">
-                        <div class="app-card-body text-center py-3">
-                            <div class="text-muted" style="font-size:0.75rem;text-transform:uppercase;font-weight:600;">Term</div>
-                            <div style="font-size:1.2rem;font-weight:700;"><?= htmlspecialchars($filter_term) ?></div>
+                    <div class="stat-card shadow-sm">
+                        <div class="stat-card-inner">
+                            <div class="stat-icon" style="background:#f0fdf4;color:#16a34a;">
+                                <i class="bi bi-calendar3"></i>
+                            </div>
+                            <div class="stat-info">
+                                <div class="stat-label">Term</div>
+                                <div class="stat-value" style="color:#16a34a;font-size:1.1rem;"><?= htmlspecialchars($filter_term) ?></div>
+                            </div>
                         </div>
+                        <div class="stat-bottom" style="background: linear-gradient(90deg, #16a34a, #4ade80);"></div>
                     </div>
                 </div>
                 <div class="col-6 col-md-3">
-                    <div class="app-card shadow-sm">
-                        <div class="app-card-body text-center py-3">
-                            <div class="text-muted" style="font-size:0.75rem;text-transform:uppercase;font-weight:600;">Up To</div>
-                            <div style="font-size:1.2rem;font-weight:700;"><?= $today->format('Y-m-d') ?></div>
+                    <div class="stat-card shadow-sm">
+                        <div class="stat-card-inner">
+                            <div class="stat-icon" style="background:#fefce8;color:#ca8a04;">
+                                <i class="bi bi-calendar-event"></i>
+                            </div>
+                            <div class="stat-info">
+                                <div class="stat-label">Up To</div>
+                                <div class="stat-value" style="color:#ca8a04;font-size:1.1rem;"><?= $today->format('d M Y') ?></div>
+                            </div>
                         </div>
+                        <div class="stat-bottom" style="background: linear-gradient(90deg, #ca8a04, #facc15);"></div>
                     </div>
                 </div>
             </div>
 
+            <!-- Type breakdown -->
+            <?php if (!empty($pending_slots)): ?>
+            <div class="row g-2 mb-4">
+                <div class="col-12 col-md-4">
+                    <div class="d-flex align-items-center gap-2 p-2 rounded" style="background:#eff6ff;">
+                        <span class="type-pill type-lecture"><i class="bi bi-journal-text me-1"></i>Lecture</span>
+                        <strong style="color:#2563eb;font-size:1.1rem;"><?= $type_counts['lecture'] ?></strong>
+                        <span class="text-muted" style="font-size:0.78rem;">pending</span>
+                    </div>
+                </div>
+                <div class="col-12 col-md-4">
+                    <div class="d-flex align-items-center gap-2 p-2 rounded" style="background:#fef2f2;">
+                        <span class="type-pill type-lab"><i class="bi bi-camera-video me-1"></i>Lab</span>
+                        <strong style="color:#dc2626;font-size:1.1rem;"><?= $type_counts['lab'] ?></strong>
+                        <span class="text-muted" style="font-size:0.78rem;">pending</span>
+                    </div>
+                </div>
+                <div class="col-12 col-md-4">
+                    <div class="d-flex align-items-center gap-2 p-2 rounded" style="background:#f0fdf4;">
+                        <span class="type-pill type-tutorial"><i class="bi bi-book me-1"></i>Tutorial</span>
+                        <strong style="color:#16a34a;font-size:1.1rem;"><?= $type_counts['tutorial'] ?></strong>
+                        <span class="text-muted" style="font-size:0.78rem;">pending</span>
+                    </div>
+                </div>
+            </div>
+            <?php endif; ?>
+
             <?php if (empty($pending_slots)): ?>
-                <div class="alert alert-success">
-                    <i class="bi bi-check-circle me-1"></i>No pending attendance slots for term <?= htmlspecialchars($filter_term) ?> up to today.
+                <div class="empty-state">
+                    <div class="icon"><i class="bi bi-check-circle"></i></div>
+                    <h5>All Clear!</h5>
+                    <p>No pending attendance slots for term <strong><?= htmlspecialchars($filter_term) ?></strong> up to today.</p>
                 </div>
             <?php else: ?>
                 <?php foreach ($grouped as $fac_id => $fac_slots):
                     $fac_name = $faculty_map[$fac_id] ?? $fac_id;
                 ?>
-                    <div class="app-card shadow-sm mb-3">
-                        <div class="app-card-body">
-                            <div class="d-flex justify-content-between align-items-center mb-2">
-                                <h5 class="mb-0">
-                                    <i class="bi bi-person-badge me-1"></i><?= htmlspecialchars($fac_name) ?>
-                                    <span class="text-muted fw-normal" style="font-size:0.85rem;">(ID: <?= htmlspecialchars($fac_id) ?>)</span>
-                                </h5>
-                                <span class="badge bg-danger" style="font-size:0.9rem;"><?= count($fac_slots) ?> pending</span>
+                    <div class="faculty-card shadow-sm mb-3">
+                        <div class="faculty-header">
+                            <div>
+                                <span class="faculty-name"><i class="bi bi-person-badge me-1"></i><?= htmlspecialchars($fac_name) ?></span>
+                                <span class="faculty-id">ID: <?= htmlspecialchars($fac_id) ?></span>
                             </div>
-                            <div class="table-responsive">
-                                <table class="table table-sm table-bordered align-middle mb-0">
-                                    <thead class="table-light">
+                            <span class="pending-badge">
+                                <i class="bi bi-hourglass-split"></i>
+                                <?= count($fac_slots) ?> pending
+                            </span>
+                        </div>
+                        <div class="table-responsive">
+                            <table class="slot-table table">
+                                <thead>
+                                    <tr>
+                                        <th style="width:40px;">#</th>
+                                        <th>Date</th>
+                                        <th>Slot</th>
+                                        <th>Type</th>
+                                        <th>Subject</th>
+                                        <th>Class / Batch</th>
+                                        <th>Sem</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <?php $i = 1; foreach ($fac_slots as $slot):
+                                        $dow_idx = (int)(new DateTime($slot['date']))->format('w');
+                                        $tc = $slot['mapping_type'];
+                                    ?>
                                         <tr>
-                                            <th>#</th>
-                                            <th>Date</th>
-                                            <th>Slot</th>
-                                            <th>Type</th>
-                                            <th>Subject</th>
-                                            <th>Class / Batch</th>
-                                            <th>Sem</th>
+                                            <td class="text-muted" style="font-size:0.78rem;"><?= $i++ ?></td>
+                                            <td>
+                                                <span class="date-cell"><?= date('d M Y', strtotime($slot['date'])) ?></span>
+                                                <span class="dow-label"><?= $dow_names[$dow_idx] ?></span>
+                                            </td>
+                                            <td><?= htmlspecialchars($slot['slot']) ?></td>
+                                            <td>
+                                                <span class="type-pill type-<?= $tc ?>">
+                                                    <?php if ($tc === 'lecture'): ?><i class="bi bi-journal-text"></i>
+                                                    <?php elseif ($tc === 'lab'): ?><i class="bi bi-camera-video"></i>
+                                                    <?php else: ?><i class="bi bi-book"></i>
+                                                    <?php endif; ?>
+                                                    <?= ucfirst($tc) ?>
+                                                </span>
+                                            </td>
+                                            <td><?= htmlspecialchars($slot['subject']) ?></td>
+                                            <td><?= htmlspecialchars($slot['class']) ?></td>
+                                            <td><?= htmlspecialchars($slot['sem']) ?></td>
                                         </tr>
-                                    </thead>
-                                    <tbody>
-                                        <?php $i = 1; foreach ($fac_slots as $slot):
-                                            $type_colors = ['lecture' => 'primary', 'lab' => 'danger', 'tutorial' => 'success'];
-                                            $tc = $type_colors[$slot['mapping_type']] ?? 'secondary';
-                                        ?>
-                                            <tr>
-                                                <td><?= $i++ ?></td>
-                                                <td><strong><?= htmlspecialchars($slot['date']) ?></strong></td>
-                                                <td><?= htmlspecialchars($slot['slot']) ?></td>
-                                                <td><span class="badge bg-<?= $tc ?>"><?= ucfirst(htmlspecialchars($slot['mapping_type'])) ?></span></td>
-                                                <td><?= htmlspecialchars($slot['subject']) ?></td>
-                                                <td><?= htmlspecialchars($slot['class']) ?></td>
-                                                <td><?= htmlspecialchars($slot['sem']) ?></td>
-                                            </tr>
-                                        <?php endforeach; ?>
-                                    </tbody>
-                                </table>
-                            </div>
+                                    <?php endforeach; ?>
+                                </tbody>
+                            </table>
                         </div>
                     </div>
                 <?php endforeach; ?>
