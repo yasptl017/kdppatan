@@ -307,6 +307,46 @@ if (!$students_result) {
 
 $total_students = $students_result ? $students_result->num_rows : 0;
 
+// --- Calculate lab attendance percentage for the selected subject ---
+$subject_att_pct = [];
+$lab_subject_esc = $conn->real_escape_string($data['subject'] ?? '');
+$lab_term_esc    = $conn->real_escape_string($data['term'] ?? '');
+$lab_sem_esc     = $conn->real_escape_string($data['sem'] ?? '');
+if ($lab_subject_esc !== '' && $lab_term_esc !== '' && $lab_sem_esc !== '' && !empty($selected_batches_normalized) && $total_students > 0) {
+    $enr_batch_map = [];
+    $students_result->data_seek(0);
+    while ($s = $students_result->fetch_assoc()) {
+        $enr = trim((string)($s['enrollmentNo'] ?? ''));
+        if ($enr !== '') {
+            $enr_batch_map[$enr] = strtoupper(trim((string)$s['labBatch']));
+        }
+    }
+    $students_result->data_seek(0);
+
+    $pct_res = $conn->query("SELECT batch, presentNo FROM labattendance WHERE term='{$lab_term_esc}' AND sem='{$lab_sem_esc}' AND subject='{$lab_subject_esc}' AND COALESCE(TRIM(labNo), '') <> ''");
+    if ($pct_res) {
+        $student_total = [];
+        $student_present = [];
+        while ($prow = $pct_res->fetch_assoc()) {
+            $row_batches = array_map('strtoupper', array_filter(array_map('trim', explode(',', (string)$prow['batch']))));
+            $present_arr = array_filter(array_map('trim', explode(',', (string)($prow['presentNo'] ?? ''))));
+            foreach ($enr_batch_map as $enr => $eb) {
+                if (!in_array($eb, $row_batches, true)) {
+                    continue;
+                }
+                $student_total[$enr] = ($student_total[$enr] ?? 0) + 1;
+                if (in_array($enr, $present_arr, true)) {
+                    $student_present[$enr] = ($student_present[$enr] ?? 0) + 1;
+                }
+            }
+        }
+        foreach (array_keys($enr_batch_map) as $enr) {
+            $t = $student_total[$enr] ?? 0;
+            $subject_att_pct[$enr] = $t > 0 ? round((($student_present[$enr] ?? 0) / $t) * 100) : -1;
+        }
+    }
+}
+
 $missing_batches = [];
 if (!empty($selected_batches_normalized)) {
     $escaped_term = $conn->real_escape_string($data['term']);
@@ -615,6 +655,7 @@ if (!empty($batch_enrollments)) {
                                     $student_batch = strtoupper(trim((string)$student['labBatch']));
                                     $student_lab = $batch_lab_map_normalized[$student_batch] ?? '';
                                     $display_name = short_name($student['name']);
+                                    $pct_val = $subject_att_pct[$student_roll] ?? -1;
                                 ?>
                                 <div class="col-6 col-sm-4 col-md-3 col-lg-2">
                                     <label class="card shadow-sm p-2 text-center student-card" style="cursor:pointer;">
@@ -624,12 +665,11 @@ if (!empty($batch_enrollments)) {
                                             <span class="d-block text-truncate" title="<?= htmlspecialchars($display_name); ?>">
                                                 <?= htmlspecialchars($display_name); ?>
                                             </span>
-                                            <span class="d-block text-muted">
-                                                Batch <?= htmlspecialchars($student_batch); ?>
-                                                <?php if ($student_lab !== ''): ?>
-                                                    &middot; Lab <?= htmlspecialchars($student_lab); ?>
-                                                <?php endif; ?>
-                                            </span>
+                                            <?php if ($pct_val >= 0): ?>
+                                                <span class="d-block" style="font-size:0.75rem;font-weight:600;color:<?= $pct_val < 75 ? '#dc2626' : '#16a34a' ?>;"><?= $pct_val ?>%</span>
+                                            <?php else: ?>
+                                                <span class="d-block" style="font-size:0.75rem;color:#94a3b8;">-</span>
+                                            <?php endif; ?>
                                         </div>
                                     </label>
                                 </div>

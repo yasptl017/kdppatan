@@ -109,6 +109,43 @@ $escaped_class = $conn->real_escape_string($data['class']);
 $students_result = $conn->query("SELECT id, enrollmentNo, name, class FROM students WHERE term = '{$escaped_term}' AND sem = '{$escaped_sem}' AND class = '{$escaped_class}' ORDER BY enrollmentNo, name");
 $total_students  = $students_result->num_rows;
 
+// --- Calculate lecture attendance percentage for the selected subject ---
+$subject_att_pct = [];
+$lecture_subject_esc = $conn->real_escape_string($data['subject'] ?? '');
+$lecture_term_esc    = $conn->real_escape_string($data['term'] ?? '');
+$lecture_sem_esc     = $conn->real_escape_string($data['sem'] ?? '');
+$lecture_class_esc   = $conn->real_escape_string($data['class'] ?? '');
+if ($lecture_subject_esc !== '' && $lecture_term_esc !== '' && $lecture_sem_esc !== '' && $lecture_class_esc !== '' && $total_students > 0) {
+    $class_enrollments = [];
+    $students_result->data_seek(0);
+    while ($s = $students_result->fetch_assoc()) {
+        $enr = trim((string)($s['enrollmentNo'] ?? ''));
+        if ($enr !== '') {
+            $class_enrollments[] = $enr;
+        }
+    }
+    $students_result->data_seek(0);
+
+    $pct_res = $conn->query("SELECT presentNo, absentNo FROM lecattendance WHERE term='{$lecture_term_esc}' AND sem='{$lecture_sem_esc}' AND class='{$lecture_class_esc}' AND subject='{$lecture_subject_esc}'");
+    if ($pct_res) {
+        $student_total = [];
+        $student_present = [];
+        while ($prow = $pct_res->fetch_assoc()) {
+            $present_arr = array_filter(array_map('trim', explode(',', (string)($prow['presentNo'] ?? ''))));
+            foreach ($class_enrollments as $enr) {
+                $student_total[$enr] = ($student_total[$enr] ?? 0) + 1;
+                if (in_array($enr, $present_arr, true)) {
+                    $student_present[$enr] = ($student_present[$enr] ?? 0) + 1;
+                }
+            }
+        }
+        foreach ($class_enrollments as $enr) {
+            $t = $student_total[$enr] ?? 0;
+            $subject_att_pct[$enr] = $t > 0 ? round((($student_present[$enr] ?? 0) / $t) * 100) : -1;
+        }
+    }
+}
+
 // --- Autofill: nearest attendance records (same day -> before -> after) ---
 $class_enrollments = [];
 if ($total_students > 0) {
@@ -374,6 +411,7 @@ usort($autofill_records, function($a, $b) {
                                 while ($student = $students_result->fetch_assoc()):
                                     $student_roll = !empty($student['enrollmentNo']) ? $student['enrollmentNo'] : $student['id'];
                                     $display_name = short_name($student['name']);
+                                    $pct_val = $subject_att_pct[$student_roll] ?? -1;
                                     ?>
                                     <div class="col-6 col-sm-4 col-md-3 col-lg-2">
                                         <label class="card shadow-sm p-2 text-center student-card" style="cursor:pointer;">
@@ -383,7 +421,11 @@ usort($autofill_records, function($a, $b) {
                                                 <span class="d-block text-truncate" title="<?= htmlspecialchars($display_name); ?>">
                                                     <?= htmlspecialchars($display_name); ?>
                                                 </span>
-                                                <span class="d-block text-muted"><?= htmlspecialchars($student['class']); ?></span>
+                                                <?php if ($pct_val >= 0): ?>
+                                                    <span class="d-block" style="font-size:0.75rem;font-weight:600;color:<?= $pct_val < 75 ? '#dc2626' : '#16a34a' ?>;"><?= $pct_val ?>%</span>
+                                                <?php else: ?>
+                                                    <span class="d-block" style="font-size:0.75rem;color:#94a3b8;">-</span>
+                                                <?php endif; ?>
                                             </div>
                                         </label>
                                     </div>

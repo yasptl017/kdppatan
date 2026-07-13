@@ -175,15 +175,60 @@ if (!$students_result) {
 }
 $total_students = $students_result->num_rows;
 
-// --- Autofill: nearest attendance records (same day -> before -> after) ---
+// Collect enrolled numbers for the selected tutorial batches
 $tut_enrollments = [];
 if ($total_students > 0) {
     $students_result->data_seek(0);
     while ($s = $students_result->fetch_assoc()) {
-        if (!empty($s['enrollmentNo'])) $tut_enrollments[] = $s['enrollmentNo'];
+        $enr = trim((string)($s['enrollmentNo'] ?? ''));
+        if ($enr !== '') {
+            $tut_enrollments[] = $enr;
+        }
     }
     $students_result->data_seek(0);
 }
+
+// ── Calculate tutorial attendance % per student for this subject ─────────────
+$subject_att_pct = [];
+$tut_subject_esc = $conn->real_escape_string($data['subject'] ?? '');
+$tut_term_esc    = $conn->real_escape_string($data['term'] ?? '');
+$tut_sem_esc     = $conn->real_escape_string($data['sem'] ?? '');
+if ($tut_subject_esc !== '' && $tut_term_esc !== '' && $tut_sem_esc !== '' && !empty($selected_tut_batches_normalized) && $total_students > 0) {
+    $enr_batch_map = [];
+    $students_result->data_seek(0);
+    while ($s = $students_result->fetch_assoc()) {
+        $enr = trim((string)($s['enrollmentNo'] ?? ''));
+        if ($enr !== '') {
+            $enr_batch_map[$enr] = strtoupper(trim((string)$s['tutBatch']));
+        }
+    }
+    $students_result->data_seek(0);
+
+    $pct_res = $conn->query("SELECT batch, presentNo FROM tutattendance WHERE term='{$tut_term_esc}' AND sem='{$tut_sem_esc}' AND subject='{$tut_subject_esc}'");
+    if ($pct_res) {
+        $student_total = [];
+        $student_present = [];
+        while ($prow = $pct_res->fetch_assoc()) {
+            $row_batches = array_map('strtoupper', array_filter(array_map('trim', explode(',', (string)($prow['batch'] ?? '')))));
+            $present_arr = array_filter(array_map('trim', explode(',', (string)($prow['presentNo'] ?? ''))));
+            foreach ($enr_batch_map as $enr => $eb) {
+                if (!in_array($eb, $row_batches, true)) {
+                    continue;
+                }
+                $student_total[$enr] = ($student_total[$enr] ?? 0) + 1;
+                if (in_array($enr, $present_arr, true)) {
+                    $student_present[$enr] = ($student_present[$enr] ?? 0) + 1;
+                }
+            }
+        }
+        foreach ($tut_enrollments as $enr) {
+            $t = $student_total[$enr] ?? 0;
+            $subject_att_pct[$enr] = $t > 0 ? round((($student_present[$enr] ?? 0) / $t) * 100) : -1;
+        }
+    }
+}
+
+// --- Autofill: nearest attendance records (same day -> before -> after) ---
 
 $autofill_records = [];
 $att_date = $data['date'];
@@ -414,6 +459,7 @@ usort($autofill_records, function($a, $b) {
                             <?php while ($student = $students_result->fetch_assoc()):
                                 $student_roll = !empty($student['enrollmentNo']) ? $student['enrollmentNo'] : $student['id'];
                                 $display_name = short_name($student['name']);
+                                $pct_val = $subject_att_pct[$student_roll] ?? -1;
                             ?>
                                 <div class="col-6 col-sm-4 col-md-3 col-lg-2">
                                     <label class="card shadow-sm p-2 text-center student-card" style="cursor:pointer;">
@@ -423,7 +469,11 @@ usort($autofill_records, function($a, $b) {
                                             <span class="d-block text-truncate" title="<?= htmlspecialchars($display_name); ?>">
                                                 <?= htmlspecialchars($display_name); ?>
                                             </span>
-                                            <span class="d-block text-muted"><?= htmlspecialchars($student['tutBatch']); ?></span>
+                                            <?php if ($pct_val >= 0): ?>
+                                                <span class="d-block" style="font-size:0.75rem;font-weight:600;color:<?= $pct_val < 75 ? '#dc2626' : '#16a34a' ?>;"><?= $pct_val ?>%</span>
+                                            <?php else: ?>
+                                                <span class="d-block" style="font-size:0.75rem;color:#94a3b8;">-</span>
+                                            <?php endif; ?>
                                         </div>
                                     </label>
                                 </div>
