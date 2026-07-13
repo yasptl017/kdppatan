@@ -444,7 +444,7 @@ if ($filter_status !== '') { $active_filter_count++; }
             "columnDefs": [
                 { "orderable": false, "targets": 9 } // Disable sort on Actions
             ],
-            "pageLength": 25,
+            "pageLength": 50,
             "language": {
                 "emptyTable": "No students match the current filter."
             }

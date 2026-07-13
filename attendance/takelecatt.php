@@ -131,7 +131,7 @@ if ($lec_res) {
         $all  = array_filter(array_map('trim', explode(',', (string)$row['presentNo'])));
         $filt = array_values(array_intersect($all, $class_enrollments));
         if (!empty($filt)) {
-            $autofill_records[] = ['type' => 'Lecture', 'label' => 'Lecture - ' . $row['subject'] . ' - ' . $row['time'], 'present' => $filt, 'sort_date' => $row['date'], 'date_order' => 0];
+            $autofill_records[] = ['type' => 'Lecture', 'label' => 'Lecture - ' . $row['subject'] . ' - ' . $row['time'] . ' (' . $att_date . ')', 'present' => $filt, 'sort_date' => $row['date'], 'date_order' => 0];
         }
     }
 }
@@ -143,7 +143,7 @@ if ($lab_res) {
         $all  = array_filter(array_map('trim', explode(',', (string)$row['presentNo'])));
         $filt = array_values(array_intersect($all, $class_enrollments));
         if (!empty($filt)) {
-            $autofill_records[] = ['type' => 'Lab', 'label' => 'Lab - ' . $row['subject'] . ' - Batch ' . $row['batch'], 'present' => $filt, 'sort_date' => $row['date'], 'date_order' => 0];
+            $autofill_records[] = ['type' => 'Lab', 'label' => 'Lab - ' . $row['subject'] . ' - Batch ' . $row['batch'] . ' (' . $att_date . ')', 'present' => $filt, 'sort_date' => $row['date'], 'date_order' => 0];
         }
     }
 }
@@ -155,7 +155,7 @@ if ($tut_res) {
         $all  = array_filter(array_map('trim', explode(',', (string)$row['presentNo'])));
         $filt = array_values(array_intersect($all, $class_enrollments));
         if (!empty($filt)) {
-            $autofill_records[] = ['type' => 'Tutorial', 'label' => 'Tutorial - ' . $row['subject'] . ' - Batch ' . $row['batch'], 'present' => $filt, 'sort_date' => $row['date'], 'date_order' => 0];
+            $autofill_records[] = ['type' => 'Tutorial', 'label' => 'Tutorial - ' . $row['subject'] . ' - Batch ' . $row['batch'] . ' (' . $att_date . ')', 'present' => $filt, 'sort_date' => $row['date'], 'date_order' => 0];
         }
     }
 }

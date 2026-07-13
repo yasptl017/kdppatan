@@ -358,7 +358,7 @@ if (!empty($batch_enrollments)) {
             $all  = array_filter(array_map('trim', explode(',', (string)$row['presentNo'])));
             $filt = array_values(array_intersect($all, $batch_enrollments));
             if (!empty($filt)) {
-                $autofill_records[] = ['type' => 'Lecture', 'label' => 'Lecture  -  ' . $row['subject'] . '  -  Class ' . $row['class'] . '  -  ' . $row['time'], 'present' => $filt, 'sort_date' => $row['date'], 'date_order' => 0];
+                $autofill_records[] = ['type' => 'Lecture', 'label' => 'Lecture - ' . $row['subject'] . ' - Class ' . $row['class'] . ' - ' . $row['time'] . ' (' . $att_date . ')', 'present' => $filt, 'sort_date' => $row['date'], 'date_order' => 0];
             }
         }
     }
@@ -370,7 +370,7 @@ if (!empty($batch_enrollments)) {
             $all  = array_filter(array_map('trim', explode(',', (string)$row['presentNo'])));
             $filt = array_values(array_intersect($all, $batch_enrollments));
             if (!empty($filt)) {
-                $autofill_records[] = ['type' => 'Lab', 'label' => 'Lab  -  ' . $row['subject'] . '  -  Batch ' . $row['batch'], 'present' => $filt, 'sort_date' => $row['date'], 'date_order' => 0];
+                $autofill_records[] = ['type' => 'Lab', 'label' => 'Lab - ' . $row['subject'] . ' - Batch ' . $row['batch'] . ' (' . $att_date . ')', 'present' => $filt, 'sort_date' => $row['date'], 'date_order' => 0];
             }
         }
     }
@@ -382,7 +382,7 @@ if (!empty($batch_enrollments)) {
             $all  = array_filter(array_map('trim', explode(',', (string)$row['presentNo'])));
             $filt = array_values(array_intersect($all, $batch_enrollments));
             if (!empty($filt)) {
-                $autofill_records[] = ['type' => 'Tutorial', 'label' => 'Tutorial  -  ' . $row['subject'] . '  -  Batch ' . $row['batch'], 'present' => $filt, 'sort_date' => $row['date'], 'date_order' => 0];
+                $autofill_records[] = ['type' => 'Tutorial', 'label' => 'Tutorial - ' . $row['subject'] . ' - Batch ' . $row['batch'] . ' (' . $att_date . ')', 'present' => $filt, 'sort_date' => $row['date'], 'date_order' => 0];
             }
         }
     }
@@ -401,7 +401,7 @@ if (!empty($batch_enrollments)) {
                 $all  = array_filter(array_map('trim', explode(',', (string)$row['presentNo'])));
                 $filt = array_values(array_intersect($all, $batch_enrollments));
                 if (!empty($filt)) {
-                    $autofill_records[] = ['type' => 'Lecture', 'label' => 'Lecture  -  ' . $row['subject'] . '  -  Class ' . $row['class'] . '  -  ' . $row['time'] . ' (' . $prev_date . ')', 'present' => $filt, 'sort_date' => $row['date'], 'date_order' => -$i];
+                    $autofill_records[] = ['type' => 'Lecture', 'label' => 'Lecture - ' . $row['subject'] . ' - Class ' . $row['class'] . ' - ' . $row['time'] . ' (' . $prev_date . ')', 'present' => $filt, 'sort_date' => $row['date'], 'date_order' => -$i];
                 }
             }
         }
@@ -414,7 +414,7 @@ if (!empty($batch_enrollments)) {
                 $all  = array_filter(array_map('trim', explode(',', (string)$row['presentNo'])));
                 $filt = array_values(array_intersect($all, $batch_enrollments));
                 if (!empty($filt)) {
-                    $autofill_records[] = ['type' => 'Lab', 'label' => 'Lab  -  ' . $row['subject'] . '  -  Batch ' . $row['batch'] . ' (' . $prev_date . ')', 'present' => $filt, 'sort_date' => $row['date'], 'date_order' => -$i];
+                    $autofill_records[] = ['type' => 'Lab', 'label' => 'Lab - ' . $row['subject'] . ' - Batch ' . $row['batch'] . ' (' . $prev_date . ')', 'present' => $filt, 'sort_date' => $row['date'], 'date_order' => -$i];
                 }
             }
         }
@@ -427,7 +427,7 @@ if (!empty($batch_enrollments)) {
                 $all  = array_filter(array_map('trim', explode(',', (string)$row['presentNo'])));
                 $filt = array_values(array_intersect($all, $batch_enrollments));
                 if (!empty($filt)) {
-                    $autofill_records[] = ['type' => 'Tutorial', 'label' => 'Tutorial  -  ' . $row['subject'] . '  -  Batch ' . $row['batch'] . ' (' . $prev_date . ')', 'present' => $filt, 'sort_date' => $row['date'], 'date_order' => -$i];
+                    $autofill_records[] = ['type' => 'Tutorial', 'label' => 'Tutorial - ' . $row['subject'] . ' - Batch ' . $row['batch'] . ' (' . $prev_date . ')', 'present' => $filt, 'sort_date' => $row['date'], 'date_order' => -$i];
                 }
             }
         }
@@ -452,7 +452,7 @@ if (!empty($batch_enrollments)) {
                     $all  = array_filter(array_map('trim', explode(',', (string)$row['presentNo'])));
                     $filt = array_values(array_intersect($all, $batch_enrollments));
                     if (!empty($filt)) {
-                        $autofill_records[] = ['type' => 'Lecture', 'label' => 'Lecture  -  ' . $row['subject'] . '  -  Class ' . $row['class'] . '  -  ' . $row['time'] . ' (' . $next_date . ')', 'present' => $filt, 'sort_date' => $row['date'], 'date_order' => $i];
+                        $autofill_records[] = ['type' => 'Lecture', 'label' => 'Lecture - ' . $row['subject'] . ' - Class ' . $row['class'] . ' - ' . $row['time'] . ' (' . $next_date . ')', 'present' => $filt, 'sort_date' => $row['date'], 'date_order' => $i];
                     }
                 }
             }
@@ -465,7 +465,7 @@ if (!empty($batch_enrollments)) {
                     $all  = array_filter(array_map('trim', explode(',', (string)$row['presentNo'])));
                     $filt = array_values(array_intersect($all, $batch_enrollments));
                     if (!empty($filt)) {
-                        $autofill_records[] = ['type' => 'Lab', 'label' => 'Lab  -  ' . $row['subject'] . '  -  Batch ' . $row['batch'] . ' (' . $next_date . ')', 'present' => $filt, 'sort_date' => $row['date'], 'date_order' => $i];
+                        $autofill_records[] = ['type' => 'Lab', 'label' => 'Lab - ' . $row['subject'] . ' - Batch ' . $row['batch'] . ' (' . $next_date . ')', 'present' => $filt, 'sort_date' => $row['date'], 'date_order' => $i];
                     }
                 }
             }
@@ -478,7 +478,7 @@ if (!empty($batch_enrollments)) {
                     $all  = array_filter(array_map('trim', explode(',', (string)$row['presentNo'])));
                     $filt = array_values(array_intersect($all, $batch_enrollments));
                     if (!empty($filt)) {
-                        $autofill_records[] = ['type' => 'Tutorial', 'label' => 'Tutorial  -  ' . $row['subject'] . '  -  Batch ' . $row['batch'] . ' (' . $next_date . ')', 'present' => $filt, 'sort_date' => $row['date'], 'date_order' => $i];
+                        $autofill_records[] = ['type' => 'Tutorial', 'label' => 'Tutorial - ' . $row['subject'] . ' - Batch ' . $row['batch'] . ' (' . $next_date . ')', 'present' => $filt, 'sort_date' => $row['date'], 'date_order' => $i];
                     }
                 }
             }
@@ -542,7 +542,7 @@ if (!empty($batch_enrollments)) {
                         </div>
                         <div class="col-6 col-md-4 col-lg-2">
                             <span class="text-muted d-block" style="font-size:0.75rem;font-weight:600;text-transform:uppercase;">Batches &amp; Lab</span>
-                            <strong><?= htmlspecialchars(!empty($selected_batches) ? implode(', ', $selected_batches) . '  -  ' . $batch_lab_csv : '-') ?></strong>
+                            <strong><?= htmlspecialchars(!empty($selected_batches) ? implode(', ', $selected_batches) . ' - ' . $batch_lab_csv : '-') ?></strong>
                         </div>
                         <div class="col-6 col-md-4 col-lg-2">
                             <span class="text-muted d-block" style="font-size:0.75rem;font-weight:600;text-transform:uppercase;">Date &amp; Slot</span>
@@ -643,7 +643,7 @@ if (!empty($batch_enrollments)) {
                                             <i class="bi bi-pc-display text-primary me-1"></i>
                                             Total PC Used
                                             <span class="text-muted fw-normal" style="font-size:0.78rem;">
-                                                 -  half of present: <span id="pcDefaultValue" class="text-primary fw-bold">0</span>
+                                                - half of present: <span id="pcDefaultValue" class="text-primary fw-bold">0</span>
                                             </span>
                                         </label>
                                         <input type="number"

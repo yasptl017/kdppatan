@@ -62,7 +62,7 @@ if (isset($_GET['search'])) {
 }
 
 // Pagination functionality
-$limit = 10;
+$limit = 50;
 $page = isset($_GET['page']) ? (int)$_GET['page'] : 1;
 $offset = ($page - 1) * $limit;
 

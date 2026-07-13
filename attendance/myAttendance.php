@@ -2388,7 +2388,7 @@ document.addEventListener('DOMContentLoaded', function () {
     }
 
     const dataTable = jQuery(tableElement).DataTable({
-        pageLength: 25,
+        pageLength: 50,
         order: [[2, 'desc']],
         autoWidth: true,
         dom: '<"row g-2 mb-2"<"col-sm-6 col-md-6 d-flex align-items-center"l><"col-sm-6 col-md-6 d-flex justify-content-end align-items-center"f>>t<"row mt-2"<"col-sm-12 col-md-6"i><"col-sm-12 col-md-6 d-flex justify-content-end"p>>',
