@@ -129,6 +129,13 @@ $header_enrollment_search = htmlspecialchars(trim((string)($_GET['enrollment'] ?
                         </a>
                     </li>
 
+                    <li class="nav-item">
+                        <a class="nav-link <?= $current_page === 'timetable.php' ? 'active' : '' ?>" href="timetable.php">
+                            <span class="nav-icon"><i class="bi bi-table"></i></span>
+                            <span class="nav-link-text">Timetable</span>
+                        </a>
+                    </li>
+
                     <li class="nav-item has-submenu">
                         <a class="nav-link submenu-toggle <?= $is_mapping_page ? 'active' : '' ?>" href="#" data-bs-toggle="collapse" data-bs-target="#submenu-add-mapping" aria-expanded="<?= $is_mapping_page ? 'true' : 'false' ?>" aria-controls="submenu-add-mapping">
                             <span class="nav-icon"><i class="bi bi-calendar-week"></i></span>
