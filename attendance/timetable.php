@@ -11,27 +11,8 @@ if ($term_result) {
     }
 }
 $default_term = $term_rows[0] ?? '';
-$selected_term = isset($_GET['term']) ? trim((string)$_GET['term']) : $default_term;
-
-// semesters
-$sem_rows = [];
-$sem_res = $conn->query("SELECT sem FROM semester WHERE status = 1 ORDER BY sem");
-if ($sem_res) {
-    while ($sr = $sem_res->fetch_assoc()) {
-        $sem_rows[] = (string)$sr['sem'];
-    }
-}
-$selected_sem = isset($_GET['sem']) ? trim((string)$_GET['sem']) : '';
-
-// classes (distinct from lecture mappings)
-$class_rows = [];
-$class_res = $conn->query("SELECT DISTINCT TRIM(class) AS class FROM lecmapping WHERE TRIM(class) <> '' ORDER BY class");
-if ($class_res) {
-    while ($cr = $class_res->fetch_assoc()) {
-        $class_rows[] = (string)$cr['class'];
-    }
-}
-$selected_class = isset($_GET['class']) ? trim((string)$_GET['class']) : '';
+$requested_term = isset($_GET['term']) ? trim((string)$_GET['term']) : '';
+$selected_term = in_array($requested_term, $term_rows, true) ? $requested_term : $default_term;
 
 $timeslots = [
     '10:30 - 11:30',
@@ -44,51 +25,44 @@ $timeslots = [
 
 $day_order = [1=>'Mon',2=>'Tue',3=>'Wed',4=>'Thu',5=>'Fri',6=>'Sat',0=>'Sun'];
 
-$matrix = [];
-foreach (array_keys($day_order) as $d) {
-    $matrix[$d] = [];
-    foreach ($timeslots as $ts) {
-        $matrix[$d][$ts] = [];
-    }
-}
-
-// Helper to add mapping entry
 function add_entry(&$matrix, $day, $slot, $label) {
     if ($slot === '') return;
     if (!isset($matrix[$day][$slot])) {
         $matrix[$day][$slot] = [];
     }
-    $matrix[$day][$slot][] = $label;
+    if (!in_array($label, $matrix[$day][$slot], true)) {
+        $matrix[$day][$slot][] = $label;
+    }
 }
 
-// Resolve a stored slot value (possibly spanning multiple hours) into one or
-// more timeslot keys from the canonical $timeslots list. Returns array of
-// matching timeslot strings. If no parseable range, returns exact match if
-// present, otherwise empty array.
+function blank_matrix(array $timeslots, array $day_order): array {
+    $matrix = [];
+    foreach (array_keys($day_order) as $d) {
+        $matrix[$d] = [];
+        foreach ($timeslots as $ts) {
+            $matrix[$d][$ts] = [];
+        }
+    }
+    return $matrix;
+}
+
 function resolve_slot_to_timeslots(string $stored, array $timeslots): array {
     $stored = trim($stored);
     if ($stored === '') return [];
 
-    // If exact match exists, prefer that
     foreach ($timeslots as $ts) {
         if (strcasecmp(trim($ts), $stored) === 0) return [$ts];
     }
 
-    // Try parse range like '10:30 - 12:30' or '10:30-12:30'
     if (preg_match('/(\d{1,2}:\d{2})\s*-\s*(\d{1,2}:\d{2})/', $stored, $m)) {
-        $start = $m[1];
-        $end = $m[2];
         $to_minutes = fn($t) => intval(explode(':', $t)[0]) * 60 + intval(explode(':', $t)[1]);
-        $smin = $to_minutes($start);
-        $emin = $to_minutes($end);
+        $smin = $to_minutes($m[1]);
+        $emin = $to_minutes($m[2]);
         $matches = [];
         foreach ($timeslots as $ts) {
             if (preg_match('/(\d{1,2}:\d{2})\s*-\s*(\d{1,2}:\d{2})/', $ts, $mm)) {
-                $ts_s = $mm[1];
-                $ts_e = $mm[2];
-                $ts_smin = $to_minutes($ts_s);
-                $ts_emin = $to_minutes($ts_e);
-                // include if the timeslot is fully inside the stored range
+                $ts_smin = $to_minutes($mm[1]);
+                $ts_emin = $to_minutes($mm[2]);
                 if ($ts_smin >= $smin && $ts_emin <= $emin) {
                     $matches[] = $ts;
                 }
@@ -100,113 +74,256 @@ function resolve_slot_to_timeslots(string $stored, array $timeslots): array {
     return [];
 }
 
-// Load mappings from lecture, lab and tutorial tables
-$mapping_tables = [
-    'lecmapping' => 'Lecture',
-    'labmapping' => 'Lab',
-    'tutmapping' => 'Tutorial',
-];
+function repeat_days_from_csv(string $csv): array {
+    return array_values(array_unique(array_filter(
+        array_map('intval', explode(',', $csv)),
+        static fn($day) => $day >= 0 && $day <= 6
+    )));
+}
 
-foreach ($mapping_tables as $tbl => $label_type) {
-    // Build where clause dynamically to support term/sem/class filters
-    $where = ["m.term = ?"];
-    $types = 's';
-    $params = [$selected_term];
+function day_slots_from_row(array $row): array {
+    $stored_slot = trim((string)($row['slot'] ?? ''));
+    $repeat_days = repeat_days_from_csv((string)($row['repeat_days'] ?? ''));
+    $day_slots = [];
 
-    if ($selected_sem !== '') {
-        $where[] = "m.sem = ?";
-        $types .= 's';
-        $params[] = $selected_sem;
-    }
-
-    // class filter logic differs per table
-    if ($selected_class !== '') {
-        if ($tbl === 'lecmapping') {
-            $where[] = "m.class = ?";
-            $types .= 's';
-            $params[] = $selected_class;
-        } elseif ($tbl === 'labmapping') {
-            $where[] = "m.batch = ?";
-            $types .= 's';
-            $params[] = $selected_class;
-        } else {
-            $where[] = "m.tutBatch = ?";
-            $types .= 's';
-            $params[] = $selected_class;
-        }
-    }
-
-    $where_sql = implode(' AND ', $where);
-    $sql = "SELECT m.*, f.Name AS faculty_name FROM {$tbl} m LEFT JOIN faculty f ON f.id = m.faculty WHERE {$where_sql} ORDER BY m.start_date DESC, m.id DESC";
-    $stmt = $conn->prepare($sql);
-    if ($stmt) {
-        // bind params dynamically
-        if ($types !== '') {
-            $bind_names = [];
-            $bind_names[] = $types;
-            for ($i = 0; $i < count($params); $i++) {
-                $bind_name = 'bind' . $i;
-                $$bind_name = $params[$i];
-                $bind_names[] = &$$bind_name;
+    if ($stored_slot !== '' && $stored_slot[0] === '{') {
+        $parsed = json_decode($stored_slot, true);
+        if (is_array($parsed)) {
+            foreach ($parsed as $day => $slot) {
+                $day_slots[(int)$day] = trim((string)$slot);
             }
-            call_user_func_array([$stmt, 'bind_param'], $bind_names);
         }
+    } else {
+        foreach ($repeat_days as $day) {
+            $day_slots[(int)$day] = $stored_slot;
+        }
+    }
+
+    return $day_slots;
+}
+
+function values_for_day(string $stored, int $day): array {
+    $stored = trim($stored);
+    if ($stored === '') return [];
+
+    if ($stored[0] === '{') {
+        $parsed = json_decode($stored, true);
+        if (!is_array($parsed)) return [];
+        $value = $parsed[(string)$day] ?? $parsed[$day] ?? [];
+        if (is_array($value)) {
+            return array_values(array_filter(array_map('trim', array_map('strval', $value))));
+        }
+        $value = trim((string)$value);
+        return $value === '' ? [] : [$value];
+    }
+
+    return [$stored];
+}
+
+function build_timetable_matrix($conn, string $term, string $sem, string $class, array $lab_batches, array $tut_batches, array $timeslots, array $day_order): array {
+    $matrix = blank_matrix($timeslots, $day_order);
+
+    $stmt = $conn->prepare("SELECT m.*, f.Name AS faculty_name FROM lecmapping m LEFT JOIN faculty f ON f.id = m.faculty WHERE m.term = ? AND m.sem = ? AND TRIM(m.class) = ? ORDER BY m.start_date DESC, m.id DESC");
+    if ($stmt) {
+        $stmt->bind_param('sss', $term, $sem, $class);
         $stmt->execute();
         $res = $stmt->get_result();
         while ($row = $res->fetch_assoc()) {
-            $stored_slot = (string)($row['slot'] ?? '');
-            $repeat_days_csv = (string)($row['repeat_days'] ?? '');
-            $repeat_days = $repeat_days_csv === '' ? [] : array_map('intval', array_filter(explode(',', $repeat_days_csv)));
+            $subject = trim((string)($row['subject'] ?? ''));
+            $faculty = trim((string)($row['faculty_name'] ?? ''));
+            $label = sprintf('lec - %s - %s - %s', $subject, $class, $faculty);
 
-            $day_slots = [];
-            if ($stored_slot !== '' && $stored_slot[0] === '{') {
-                $parsed = json_decode($stored_slot, true);
-                if (is_array($parsed)) {
-                    foreach ($parsed as $k => $v) {
-                        $day_slots[(int)$k] = (string)$v;
-                    }
-                }
-            } else {
-                // old format: same slot for all repeat_days
-                foreach ($repeat_days as $d) {
-                    $day_slots[(int)$d] = $stored_slot;
-                }
-            }
-
-            foreach ($day_slots as $dnum => $slotval) {
-                $slotval = trim((string)$slotval);
-                if ($slotval === '') continue;
-
-                // Build plain label according to naming rules
-                $subject = isset($row['subject']) ? trim((string)$row['subject']) : '';
-                $faculty = isset($row['faculty_name']) ? trim((string)$row['faculty_name']) : '';
-
-                if ($tbl === 'lecmapping') {
-                    $class = trim((string)($row['class'] ?? ''));
-                    $label = sprintf('lec - %s - %s - %s', $subject, $class, $faculty);
-                } elseif ($tbl === 'labmapping') {
-                    $batch = trim((string)($row['batch'] ?? ''));
-                    $location = trim((string)($row['labNo'] ?? ''));
-                    $label = sprintf('lab - %s - %s - %s - %s', $subject, $batch, $faculty, $location);
-                } else {
-                    $batch = trim((string)($row['tutBatch'] ?? ''));
-                    $label = sprintf('tut - %s - %s - %s', $subject, $batch, $faculty);
-                }
-
-                // Map stored slot to one or more canonical timeslots (handles multi-hour labs)
-                $affected = resolve_slot_to_timeslots($slotval, $timeslots);
-                if (empty($affected)) {
-                    // fallback to using the raw stored value if no mapping found
-                    $affected = [$slotval];
-                }
-                foreach ($affected as $ats) {
-                    add_entry($matrix, (int)$dnum, $ats, $label);
+            foreach (day_slots_from_row($row) as $day => $slot) {
+                foreach (resolve_slot_to_timeslots($slot, $timeslots) ?: [$slot] as $resolved_slot) {
+                    add_entry($matrix, (int)$day, $resolved_slot, $label);
                 }
             }
         }
         $stmt->close();
     }
+
+    $lab_lookup = array_flip($lab_batches);
+    $stmt = $conn->prepare("SELECT m.*, f.Name AS faculty_name FROM labmapping m LEFT JOIN faculty f ON f.id = m.faculty WHERE m.term = ? AND m.sem = ? ORDER BY m.start_date DESC, m.id DESC");
+    if ($stmt) {
+        $stmt->bind_param('ss', $term, $sem);
+        $stmt->execute();
+        $res = $stmt->get_result();
+        while ($row = $res->fetch_assoc()) {
+            $subject = trim((string)($row['subject'] ?? ''));
+            $faculty = trim((string)($row['faculty_name'] ?? ''));
+
+            foreach (day_slots_from_row($row) as $day => $slot) {
+                $batches = values_for_day((string)($row['batch'] ?? ''), (int)$day);
+                $labs = values_for_day((string)($row['labNo'] ?? ''), (int)$day);
+                foreach ($batches as $idx => $batch) {
+                    if (!isset($lab_lookup[$batch])) continue;
+                    $location = trim((string)($labs[$idx] ?? ($labs[0] ?? '')));
+                    $label = sprintf('lab - %s - %s - %s - %s', $subject, $batch, $faculty, $location);
+                    foreach (resolve_slot_to_timeslots($slot, $timeslots) ?: [$slot] as $resolved_slot) {
+                        add_entry($matrix, (int)$day, $resolved_slot, $label);
+                    }
+                }
+            }
+        }
+        $stmt->close();
+    }
+
+    $tut_lookup = array_flip($tut_batches);
+    $stmt = $conn->prepare("SELECT m.*, f.Name AS faculty_name FROM tutmapping m LEFT JOIN faculty f ON f.id = m.faculty WHERE m.term = ? AND m.sem = ? ORDER BY m.start_date DESC, m.id DESC");
+    if ($stmt) {
+        $stmt->bind_param('ss', $term, $sem);
+        $stmt->execute();
+        $res = $stmt->get_result();
+        while ($row = $res->fetch_assoc()) {
+            $subject = trim((string)($row['subject'] ?? ''));
+            $faculty = trim((string)($row['faculty_name'] ?? ''));
+
+            foreach (day_slots_from_row($row) as $day => $slot) {
+                $batches = values_for_day((string)($row['tutBatch'] ?? ''), (int)$day);
+                foreach ($batches as $batch) {
+                    if (!isset($tut_lookup[$batch])) continue;
+                    $label = sprintf('tut - %s - %s - %s', $subject, $batch, $faculty);
+                    foreach (resolve_slot_to_timeslots($slot, $timeslots) ?: [$slot] as $resolved_slot) {
+                        add_entry($matrix, (int)$day, $resolved_slot, $label);
+                    }
+                }
+            }
+        }
+        $stmt->close();
+    }
+
+    return $matrix;
 }
+
+function render_timetable_table(array $matrix, array $timeslots, array $day_order): void {
+    $cell_text = [];
+    $rowspan_tracker = [];
+    foreach ($day_order as $dnum => $dname) {
+        foreach ($timeslots as $ts) {
+            $cell_text[$dnum][$ts] = empty($matrix[$dnum][$ts]) ? '' : implode(' | ', $matrix[$dnum][$ts]);
+        }
+    }
+    ?>
+    <div class="table-responsive">
+        <table class="table table-bordered mb-0 timetable-table">
+            <thead class="table-light">
+                <tr>
+                    <th style="width:150px">Time \ Day</th>
+                    <?php foreach ($day_order as $dname): ?>
+                        <th class="text-center"><?= htmlspecialchars($dname) ?></th>
+                    <?php endforeach; ?>
+                </tr>
+            </thead>
+            <tbody>
+                <?php foreach ($timeslots as $ri => $ts): ?>
+                    <tr>
+                        <td class="fw-semibold align-middle"><?= htmlspecialchars($ts) ?></td>
+                        <?php foreach ($day_order as $dnum => $dname):
+                            if (isset($rowspan_tracker[$dnum][$ts]) && $rowspan_tracker[$dnum][$ts] > 0) {
+                                $rowspan_tracker[$dnum][$ts]--;
+                                continue;
+                            }
+
+                            $text = $cell_text[$dnum][$ts] ?? '';
+                            if ($text === '') {
+                                echo '<td class="empty-slot">&nbsp;</td>';
+                                continue;
+                            }
+
+                            $rowspan = 1;
+                            for ($k = $ri + 1; $k < count($timeslots); $k++) {
+                                $next_ts = $timeslots[$k];
+                                if (($cell_text[$dnum][$next_ts] ?? '') !== $text) break;
+                                $rowspan++;
+                            }
+
+                            if ($rowspan > 1) {
+                                for ($k = 1; $k < $rowspan; $k++) {
+                                    $future_ts = $timeslots[$ri + $k];
+                                    $rowspan_tracker[$dnum][$future_ts] = ($rowspan_tracker[$dnum][$future_ts] ?? 0) + 1;
+                                }
+                            }
+
+                            $entries = array_map('htmlspecialchars', $matrix[$dnum][$ts] ?? []);
+                            $rowspan_attr = $rowspan > 1 ? ' rowspan="' . $rowspan . '"' : '';
+                            echo '<td' . $rowspan_attr . '>' . implode('<br>', $entries) . '</td>';
+                        endforeach; ?>
+                    </tr>
+                <?php endforeach; ?>
+            </tbody>
+        </table>
+    </div>
+    <?php
+}
+
+$timetable_groups = [];
+if ($selected_term !== '') {
+    $stmt = $conn->prepare("SELECT sem, class, labBatch, tutBatch FROM students WHERE term = ? AND TRIM(class) <> '' GROUP BY sem, class, labBatch, tutBatch ORDER BY sem, class, labBatch, tutBatch");
+    if ($stmt) {
+        $stmt->bind_param('s', $selected_term);
+        $stmt->execute();
+        $res = $stmt->get_result();
+        while ($row = $res->fetch_assoc()) {
+            $sem = trim((string)$row['sem']);
+            $class = trim((string)$row['class']);
+            if ($sem === '' || $class === '') continue;
+            $key = $sem . '|' . $class;
+            if (!isset($timetable_groups[$key])) {
+                $timetable_groups[$key] = [
+                    'sem' => $sem,
+                    'class' => $class,
+                    'lab_batches' => [],
+                    'tut_batches' => [],
+                    'matrix' => [],
+                ];
+            }
+            $lab_batch = trim((string)($row['labBatch'] ?? ''));
+            $tut_batch = trim((string)($row['tutBatch'] ?? ''));
+            if ($lab_batch !== '') $timetable_groups[$key]['lab_batches'][$lab_batch] = $lab_batch;
+            if ($tut_batch !== '') $timetable_groups[$key]['tut_batches'][$tut_batch] = $tut_batch;
+        }
+        $stmt->close();
+    }
+
+    $stmt = $conn->prepare("SELECT DISTINCT sem, TRIM(class) AS class FROM lecmapping WHERE term = ? AND TRIM(class) <> '' ORDER BY sem, class");
+    if ($stmt) {
+        $stmt->bind_param('s', $selected_term);
+        $stmt->execute();
+        $res = $stmt->get_result();
+        while ($row = $res->fetch_assoc()) {
+            $sem = trim((string)$row['sem']);
+            $class = trim((string)$row['class']);
+            if ($sem === '' || $class === '') continue;
+            $key = $sem . '|' . $class;
+            if (!isset($timetable_groups[$key])) {
+                $timetable_groups[$key] = [
+                    'sem' => $sem,
+                    'class' => $class,
+                    'lab_batches' => [],
+                    'tut_batches' => [],
+                    'matrix' => [],
+                ];
+            }
+        }
+        $stmt->close();
+    }
+}
+
+foreach ($timetable_groups as &$group) {
+    $group['lab_batches'] = array_values($group['lab_batches']);
+    $group['tut_batches'] = array_values($group['tut_batches']);
+    $group['matrix'] = build_timetable_matrix(
+        $conn,
+        $selected_term,
+        $group['sem'],
+        $group['class'],
+        $group['lab_batches'],
+        $group['tut_batches'],
+        $timeslots,
+        $day_order
+    );
+}
+unset($group);
 
 ?>
 <!DOCTYPE html>
@@ -217,131 +334,52 @@ foreach ($mapping_tables as $tbl => $label_type) {
 <div class="app-wrapper">
     <div class="app-content pt-3 p-md-3 p-lg-4">
         <div class="container-xl">
-            <h1 class="app-page-title"><i class="bi bi-table me-2"></i>Timetable</h1>
-
-            <div class="row mb-3">
-                <div class="col-12 col-md-4">
-                    <form method="GET" action="timetable.php">
-                        <label class="form-label">Term / Semester / Class</label>
-                        <div class="d-flex gap-2">
-                            <select name="term" class="form-control" onchange="this.form.submit()">
-                                <?php foreach ($term_rows as $t): ?>
-                                    <option value="<?= htmlspecialchars($t) ?>" <?= ($t === $selected_term) ? 'selected' : '' ?>><?= htmlspecialchars($t) ?></option>
-                                <?php endforeach; ?>
-                            </select>
-                            <select name="sem" class="form-control" onchange="this.form.submit()">
-                                <option value="">All Semesters</option>
-                                <?php foreach ($sem_rows as $s): ?>
-                                    <option value="<?= htmlspecialchars($s) ?>" <?= ($s === $selected_sem) ? 'selected' : '' ?>><?= htmlspecialchars($s) ?></option>
-                                <?php endforeach; ?>
-                            </select>
-                            <select name="class" class="form-control" onchange="this.form.submit()">
-                                <option value="">All Classes</option>
-                                <?php foreach ($class_rows as $c): ?>
-                                    <option value="<?= htmlspecialchars($c) ?>" <?= ($c === $selected_class) ? 'selected' : '' ?>><?= htmlspecialchars($c) ?></option>
-                                <?php endforeach; ?>
-                            </select>
-                        </div>
-                    </form>
-                </div>
+            <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-3">
+                <h1 class="app-page-title mb-0"><i class="bi bi-table me-2"></i>Timetable</h1>
+                <form method="GET" action="timetable.php" class="d-flex align-items-center gap-2">
+                    <label for="termSelect" class="form-label mb-0 fw-semibold">Term</label>
+                    <select id="termSelect" name="term" class="form-control form-control-sm" onchange="this.form.submit()">
+                        <?php foreach ($term_rows as $term): ?>
+                            <option value="<?= htmlspecialchars($term) ?>" <?= $term === $selected_term ? 'selected' : '' ?>>
+                                <?= htmlspecialchars($term) ?>
+                            </option>
+                        <?php endforeach; ?>
+                    </select>
+                </form>
             </div>
 
-            <div class="row">
-                <div class="col-12">
-                    <div class="app-card shadow-sm"><div class="app-card-body">
-                        <div class="table-responsive">
-                            <style>
-                                .empty-slot { background-color: #e6ffe6; }
-                                .cell-entry { padding:4px 6px; font-size:0.92rem; }
-                            </style>
-                            <table class="table table-bordered mb-0" style="font-size:0.95rem;">
-                                <thead class="table-light">
-                                    <tr>
-                                        <th style="width:150px">Time \ Day</th>
-                                        <?php foreach ($day_order as $dname): ?>
-                                            <th class="text-center"><?= htmlspecialchars($dname) ?></th>
-                                        <?php endforeach; ?>
-                                    </tr>
-                                </thead>
-                                <tbody>
-                                    <?php
-                                    // Build a simple cell text map for easy comparison
-                                    $cell_text = [];
-                                    $rowspan_tracker = [];
-                                    foreach ($day_order as $dnum => $dname) {
-                                        foreach ($timeslots as $ts) {
-                                            $cells = $matrix[$dnum][$ts] ?? [];
-                                            // Use subject and class if available, otherwise raw HTML
-                                            if (empty($cells)) {
-                                                $cell_text[$dnum][$ts] = '';
-                                            } else {
-                                                // strip tags to compare textual content for rowspan merging
-                                                // compare by joined text
-                                                $plain = implode(' | ', $cells);
-                                                $cell_text[$dnum][$ts] = $plain;
-                                            }
-                                        }
-                                    }
+            <style>
+                .empty-slot { background-color: #e6ffe6; }
+                .timetable-table { font-size: 0.95rem; }
+                .timetable-table td { vertical-align: middle; }
+            </style>
 
-                                    foreach ($timeslots as $ri => $ts): ?>
-                                        <tr>
-                                            <td class="fw-semibold align-middle"><?= htmlspecialchars($ts) ?></td>
-                                            <?php foreach ($day_order as $dnum => $dname):
-                                                // If this cell was already merged by a previous rowspan, skip
-                                                $skip = false;
-                                                if (isset($rowspan_tracker[$dnum][$ts]) && $rowspan_tracker[$dnum][$ts] > 0) {
-                                                    $rowspan_tracker[$dnum][$ts]--;
-                                                    $skip = true;
-                                                }
-                                                if ($skip) continue;
-
-                                                $text = $cell_text[$dnum][$ts] ?? '';
-                                                if ($text === '') {
-                                                    echo '<td class="empty-slot">&nbsp;</td>';
-                                                    continue;
-                                                }
-
-                                                // Determine rowspan by checking how many following timeslots have identical text
-                                                $rowspan = 1;
-                                                for ($k = $ri + 1; $k < count($timeslots); $k++) {
-                                                    $next_ts = $timeslots[$k];
-                                                    $next_text = $cell_text[$dnum][$next_ts] ?? '';
-                                                    if ($next_text === $text) {
-                                                        $rowspan++;
-                                                    } else {
-                                                        break;
-                                                    }
-                                                }
-
-                                                // Mark tracker to skip subsequent cells merged by rowspan
-                                                if ($rowspan > 1) {
-                                                    for ($k = 1; $k < $rowspan; $k++) {
-                                                        $future_ts = $timeslots[$ri + $k];
-                                                        $rowspan_tracker[$dnum][$future_ts] = ($rowspan_tracker[$dnum][$future_ts] ?? 0) + 1;
-                                                    }
-                                                }
-
-                                                // Render cell: show each entry on its own line
-                                                $entries = $matrix[$dnum][$ts] ?? [];
-                                                if (!empty($entries)) {
-                                                    $escaped = array_map('htmlspecialchars', $entries);
-                                                    $html = implode('<br>', $escaped);
-                                                } else {
-                                                    $html = '';
-                                                }
-
-                                                $rowspan_attr = $rowspan > 1 ? ' rowspan="' . $rowspan . '"' : '';
-                                                echo '<td' . $rowspan_attr . '>' . $html . '</td>';
-                                            endforeach; ?>
-                                        </tr>
-                                    <?php endforeach; ?>
-                                </tbody>
-                            </table>
+            <?php if (empty($timetable_groups)): ?>
+                <div class="alert alert-info"><i class="bi bi-info-circle me-1"></i>No class timetable data found.</div>
+            <?php else: ?>
+                <div class="row g-4">
+                    <?php foreach ($timetable_groups as $group): ?>
+                        <div class="col-12">
+                            <div class="app-card shadow-sm">
+                                <div class="app-card-body">
+                                    <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-3">
+                                        <h4 class="mb-0">Sem <?= htmlspecialchars($group['sem']) ?> - Class <?= htmlspecialchars($group['class']) ?></h4>
+                                        <div class="d-flex flex-wrap gap-2">
+                                            <?php if (!empty($group['lab_batches'])): ?>
+                                                <span class="badge bg-primary-subtle text-dark border">Lab: <?= htmlspecialchars(implode(', ', $group['lab_batches'])) ?></span>
+                                            <?php endif; ?>
+                                            <?php if (!empty($group['tut_batches'])): ?>
+                                                <span class="badge bg-success-subtle text-dark border">Tutorial: <?= htmlspecialchars(implode(', ', $group['tut_batches'])) ?></span>
+                                            <?php endif; ?>
+                                        </div>
+                                    </div>
+                                    <?php render_timetable_table($group['matrix'], $timeslots, $day_order); ?>
+                                </div>
+                            </div>
                         </div>
-                    </div></div>
+                    <?php endforeach; ?>
                 </div>
-            </div>
-
+            <?php endif; ?>
         </div>
     </div>
     <?php include('footer.php'); ?>
