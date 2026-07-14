@@ -77,6 +77,10 @@ $header_enrollment_search = htmlspecialchars(trim((string)($_GET['enrollment'] ?
                                 </span>
                             </a>
                             <div class="dropdown-menu dropdown-menu-end user-profile-dropdown" aria-labelledby="user-dropdown-toggle">
+                                <a class="dropdown-item user-profile-action <?= $current_page === 'changePassword.php' ? 'active' : '' ?>" href="changePassword.php">
+                                    <i class="bi bi-key me-2"></i>
+                                    <span>Change Password</span>
+                                </a>
                                 <a class="dropdown-item user-profile-action" href="logout.php">
                                     <i class="bi bi-box-arrow-right me-2"></i>
                                     <span>Log Out</span>
