@@ -7,14 +7,24 @@ $term_rows = [];
 $term_result = $conn->query("SELECT DISTINCT term FROM students ORDER BY term DESC");
 if ($term_result) {
     while ($tr = $term_result->fetch_assoc()) {
-        $term_rows[] = (string)$tr['term'];
+        $term = trim((string)$tr['term']);
+        if ($term !== '') {
+            $term_rows[] = $term;
+        }
     }
 }
+$term_rows = array_values(array_unique($term_rows));
 usort($term_rows, static function ($left, $right) {
-    if (is_numeric($left) && is_numeric($right)) {
-        return (float)$right <=> (float)$left;
+    preg_match('/\d+/', (string)$left, $left_match);
+    preg_match('/\d+/', (string)$right, $right_match);
+    $left_number = isset($left_match[0]) ? (int)$left_match[0] : PHP_INT_MIN;
+    $right_number = isset($right_match[0]) ? (int)$right_match[0] : PHP_INT_MIN;
+
+    if ($left_number !== $right_number) {
+        return $right_number <=> $left_number;
     }
-    return strnatcmp((string)$right, (string)$left);
+
+    return strnatcasecmp((string)$right, (string)$left);
 });
 $default_term = $term_rows[0] ?? '';
 $requested_term = isset($_GET['term']) ? trim((string)$_GET['term']) : '';
