@@ -56,13 +56,13 @@ $timeslots = [
 
 $day_order = [1=>'Mon',2=>'Tue',3=>'Wed',4=>'Thu',5=>'Fri',6=>'Sat',0=>'Sun'];
 
-function add_entry(&$matrix, $day, $slot, $label) {
+function add_entry(&$matrix, $day, $slot, $entry) {
     if ($slot === '') return;
     if (!isset($matrix[$day][$slot])) {
         $matrix[$day][$slot] = [];
     }
-    if (!in_array($label, $matrix[$day][$slot], true)) {
-        $matrix[$day][$slot][] = $label;
+    if (!in_array($entry, $matrix[$day][$slot], true)) {
+        $matrix[$day][$slot][] = $entry;
     }
 }
 
@@ -166,11 +166,11 @@ function build_timetable_matrix($conn, string $term, string $sem, string $class,
         while ($row = $res->fetch_assoc()) {
             $subject = timetable_subject_name(trim((string)($row['subject'] ?? '')), $subject_short_names);
             $faculty = trim((string)($row['faculty_name'] ?? ''));
-            $label = sprintf('lec - %s - %s - %s', $subject, $class, $faculty);
+            $entry = ['type' => 'lecture', 'label' => sprintf('%s - %s - %s', $subject, $class, $faculty)];
 
             foreach (day_slots_from_row($row) as $day => $slot) {
                 foreach (resolve_slot_to_timeslots($slot, $timeslots) ?: [$slot] as $resolved_slot) {
-                    add_entry($matrix, (int)$day, $resolved_slot, $label);
+                    add_entry($matrix, (int)$day, $resolved_slot, $entry);
                 }
             }
         }
@@ -193,9 +193,9 @@ function build_timetable_matrix($conn, string $term, string $sem, string $class,
                 foreach ($batches as $idx => $batch) {
                     if (!isset($lab_lookup[$batch])) continue;
                     $location = trim((string)($labs[$idx] ?? ($labs[0] ?? '')));
-                    $label = sprintf('lab - %s - %s - %s - %s', $subject, $batch, $faculty, $location);
+                    $entry = ['type' => 'lab', 'label' => sprintf('%s - %s - %s - %s', $subject, $batch, $faculty, $location)];
                     foreach (resolve_slot_to_timeslots($slot, $timeslots) ?: [$slot] as $resolved_slot) {
-                        add_entry($matrix, (int)$day, $resolved_slot, $label);
+                        add_entry($matrix, (int)$day, $resolved_slot, $entry);
                     }
                 }
             }
@@ -217,9 +217,9 @@ function build_timetable_matrix($conn, string $term, string $sem, string $class,
                 $batches = values_for_day((string)($row['tutBatch'] ?? ''), (int)$day);
                 foreach ($batches as $batch) {
                     if (!isset($tut_lookup[$batch])) continue;
-                    $label = sprintf('tut - %s - %s - %s', $subject, $batch, $faculty);
+                    $entry = ['type' => 'tutorial', 'label' => sprintf('%s - %s - %s', $subject, $batch, $faculty)];
                     foreach (resolve_slot_to_timeslots($slot, $timeslots) ?: [$slot] as $resolved_slot) {
-                        add_entry($matrix, (int)$day, $resolved_slot, $label);
+                        add_entry($matrix, (int)$day, $resolved_slot, $entry);
                     }
                 }
             }
@@ -235,7 +235,10 @@ function render_timetable_table(array $matrix, array $timeslots, array $day_orde
     $rowspan_tracker = [];
     foreach ($day_order as $dnum => $dname) {
         foreach ($timeslots as $ts) {
-            $cell_text[$dnum][$ts] = empty($matrix[$dnum][$ts]) ? '' : implode(' | ', $matrix[$dnum][$ts]);
+            $cell_text[$dnum][$ts] = empty($matrix[$dnum][$ts]) ? '' : implode(' | ', array_map(
+                static fn($entry) => (string)($entry['type'] ?? '') . ':' . (string)($entry['label'] ?? ''),
+                $matrix[$dnum][$ts]
+            ));
         }
     }
     ?>
@@ -279,9 +282,13 @@ function render_timetable_table(array $matrix, array $timeslots, array $day_orde
                                 }
                             }
 
-                            $entries = array_map('htmlspecialchars', $matrix[$dnum][$ts] ?? []);
+                            $entries = array_map(static function ($entry) {
+                                $type = htmlspecialchars((string)($entry['type'] ?? ''));
+                                $label = htmlspecialchars((string)($entry['label'] ?? ''));
+                                return '<div class="timetable-entry timetable-entry-' . $type . '">' . $label . '</div>';
+                            }, $matrix[$dnum][$ts] ?? []);
                             $rowspan_attr = $rowspan > 1 ? ' rowspan="' . $rowspan . '"' : '';
-                            echo '<td' . $rowspan_attr . '>' . implode('<br>', $entries) . '</td>';
+                            echo '<td' . $rowspan_attr . '>' . implode('', $entries) . '</td>';
                         endforeach; ?>
                     </tr>
                 <?php endforeach; ?>
@@ -388,6 +395,11 @@ unset($group);
                 .empty-slot { background-color: #e6ffe6; }
                 .timetable-table { font-size: 0.95rem; }
                 .timetable-table td { vertical-align: middle; }
+                .timetable-entry { font-weight: 600; line-height: 1.35; margin-bottom: 4px; }
+                .timetable-entry:last-child { margin-bottom: 0; }
+                .timetable-entry-lecture { color: #dc3545; }
+                .timetable-entry-lab { color: #0d6efd; }
+                .timetable-entry-tutorial { color: #c2185b; }
             </style>
 
             <?php if (empty($timetable_groups)): ?>
