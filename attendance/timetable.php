@@ -399,7 +399,7 @@ unset($group);
                 .timetable-entry:last-child { margin-bottom: 0; }
                 .timetable-entry-lecture { color: #dc3545; }
                 .timetable-entry-lab { color: #0d6efd; }
-                .timetable-entry-tutorial { color: #c2185b; }
+                .timetable-entry-tutorial { color: #e83e8c; }
             </style>
 
             <?php if (empty($timetable_groups)): ?>
