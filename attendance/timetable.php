@@ -61,6 +61,45 @@ function add_entry(&$matrix, $day, $slot, $label) {
     $matrix[$day][$slot][] = $label;
 }
 
+// Resolve a stored slot value (possibly spanning multiple hours) into one or
+// more timeslot keys from the canonical $timeslots list. Returns array of
+// matching timeslot strings. If no parseable range, returns exact match if
+// present, otherwise empty array.
+function resolve_slot_to_timeslots(string $stored, array $timeslots): array {
+    $stored = trim($stored);
+    if ($stored === '') return [];
+
+    // If exact match exists, prefer that
+    foreach ($timeslots as $ts) {
+        if (strcasecmp(trim($ts), $stored) === 0) return [$ts];
+    }
+
+    // Try parse range like '10:30 - 12:30' or '10:30-12:30'
+    if (preg_match('/(\d{1,2}:\d{2})\s*-\s*(\d{1,2}:\d{2})/', $stored, $m)) {
+        $start = $m[1];
+        $end = $m[2];
+        $to_minutes = fn($t) => intval(explode(':', $t)[0]) * 60 + intval(explode(':', $t)[1]);
+        $smin = $to_minutes($start);
+        $emin = $to_minutes($end);
+        $matches = [];
+        foreach ($timeslots as $ts) {
+            if (preg_match('/(\d{1,2}:\d{2})\s*-\s*(\d{1,2}:\d{2})/', $ts, $mm)) {
+                $ts_s = $mm[1];
+                $ts_e = $mm[2];
+                $ts_smin = $to_minutes($ts_s);
+                $ts_emin = $to_minutes($ts_e);
+                // include if the timeslot is fully inside the stored range
+                if ($ts_smin >= $smin && $ts_emin <= $emin) {
+                    $matches[] = $ts;
+                }
+            }
+        }
+        return $matches;
+    }
+
+    return [];
+}
+
 // Load mappings from lecture, lab and tutorial tables
 $mapping_tables = [
     'lecmapping' => 'Lecture',
@@ -154,8 +193,15 @@ foreach ($mapping_tables as $tbl => $label_type) {
                     $label = sprintf('tut - %s - %s - %s', $subject, $batch, $faculty);
                 }
 
-                // Add plain label to matrix (multiple entries will be shown each on new line)
-                add_entry($matrix, (int)$dnum, $slotval, $label);
+                // Map stored slot to one or more canonical timeslots (handles multi-hour labs)
+                $affected = resolve_slot_to_timeslots($slotval, $timeslots);
+                if (empty($affected)) {
+                    // fallback to using the raw stored value if no mapping found
+                    $affected = [$slotval];
+                }
+                foreach ($affected as $ats) {
+                    add_entry($matrix, (int)$dnum, $ats, $label);
+                }
             }
         }
         $stmt->close();
