@@ -10,6 +10,12 @@ if ($term_result) {
         $term_rows[] = (string)$tr['term'];
     }
 }
+usort($term_rows, static function ($left, $right) {
+    if (is_numeric($left) && is_numeric($right)) {
+        return (float)$right <=> (float)$left;
+    }
+    return strnatcmp((string)$right, (string)$left);
+});
 $default_term = $term_rows[0] ?? '';
 $requested_term = isset($_GET['term']) ? trim((string)$_GET['term']) : '';
 $selected_term = in_array($requested_term, $term_rows, true) ? $requested_term : $default_term;
