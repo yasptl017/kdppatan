@@ -13,6 +13,26 @@ if ($term_result) {
 $default_term = $term_rows[0] ?? '';
 $selected_term = isset($_GET['term']) ? trim((string)$_GET['term']) : $default_term;
 
+// semesters
+$sem_rows = [];
+$sem_res = $conn->query("SELECT sem FROM semester WHERE status = 1 ORDER BY sem");
+if ($sem_res) {
+    while ($sr = $sem_res->fetch_assoc()) {
+        $sem_rows[] = (string)$sr['sem'];
+    }
+}
+$selected_sem = isset($_GET['sem']) ? trim((string)$_GET['sem']) : '';
+
+// classes (distinct from lecture mappings)
+$class_rows = [];
+$class_res = $conn->query("SELECT DISTINCT TRIM(class) AS class FROM lecmapping WHERE TRIM(class) <> '' ORDER BY class");
+if ($class_res) {
+    while ($cr = $class_res->fetch_assoc()) {
+        $class_rows[] = (string)$cr['class'];
+    }
+}
+$selected_class = isset($_GET['class']) ? trim((string)$_GET['class']) : '';
+
 $timeslots = [
     '10:30 - 11:30',
     '11:30 - 12:30',
@@ -49,9 +69,49 @@ $mapping_tables = [
 ];
 
 foreach ($mapping_tables as $tbl => $label_type) {
-    $stmt = $conn->prepare("SELECT m.*, f.Name AS faculty_name FROM {$tbl} m LEFT JOIN faculty f ON f.id = m.faculty WHERE m.term = ? ORDER BY m.start_date DESC, m.id DESC");
+    // Build where clause dynamically to support term/sem/class filters
+    $where = ["m.term = ?"];
+    $types = 's';
+    $params = [$selected_term];
+
+    if ($selected_sem !== '') {
+        $where[] = "m.sem = ?";
+        $types .= 's';
+        $params[] = $selected_sem;
+    }
+
+    // class filter logic differs per table
+    if ($selected_class !== '') {
+        if ($tbl === 'lecmapping') {
+            $where[] = "m.class = ?";
+            $types .= 's';
+            $params[] = $selected_class;
+        } elseif ($tbl === 'labmapping') {
+            $where[] = "m.batch = ?";
+            $types .= 's';
+            $params[] = $selected_class;
+        } else {
+            $where[] = "m.tutBatch = ?";
+            $types .= 's';
+            $params[] = $selected_class;
+        }
+    }
+
+    $where_sql = implode(' AND ', $where);
+    $sql = "SELECT m.*, f.Name AS faculty_name FROM {$tbl} m LEFT JOIN faculty f ON f.id = m.faculty WHERE {$where_sql} ORDER BY m.start_date DESC, m.id DESC";
+    $stmt = $conn->prepare($sql);
     if ($stmt) {
-        $stmt->bind_param('s', $selected_term);
+        // bind params dynamically
+        if ($types !== '') {
+            $bind_names = [];
+            $bind_names[] = $types;
+            for ($i = 0; $i < count($params); $i++) {
+                $bind_name = 'bind' . $i;
+                $$bind_name = $params[$i];
+                $bind_names[] = &$$bind_name;
+            }
+            call_user_func_array([$stmt, 'bind_param'], $bind_names);
+        }
         $stmt->execute();
         $res = $stmt->get_result();
         while ($row = $res->fetch_assoc()) {
@@ -94,7 +154,7 @@ foreach ($mapping_tables as $tbl => $label_type) {
                     $label = sprintf('tut - %s - %s - %s', $subject, $batch, $faculty);
                 }
 
-                // Add plain label to matrix (multiple entries will be concatenated)
+                // Add plain label to matrix (multiple entries will be shown each on new line)
                 add_entry($matrix, (int)$dnum, $slotval, $label);
             }
         }
@@ -116,12 +176,26 @@ foreach ($mapping_tables as $tbl => $label_type) {
             <div class="row mb-3">
                 <div class="col-12 col-md-4">
                     <form method="GET" action="timetable.php">
-                        <label class="form-label">Select Term</label>
-                        <select name="term" class="form-control" onchange="this.form.submit()">
-                            <?php foreach ($term_rows as $t): ?>
-                                <option value="<?= htmlspecialchars($t) ?>" <?= ($t === $selected_term) ? 'selected' : '' ?>><?= htmlspecialchars($t) ?></option>
-                            <?php endforeach; ?>
-                        </select>
+                        <label class="form-label">Term / Semester / Class</label>
+                        <div class="d-flex gap-2">
+                            <select name="term" class="form-control" onchange="this.form.submit()">
+                                <?php foreach ($term_rows as $t): ?>
+                                    <option value="<?= htmlspecialchars($t) ?>" <?= ($t === $selected_term) ? 'selected' : '' ?>><?= htmlspecialchars($t) ?></option>
+                                <?php endforeach; ?>
+                            </select>
+                            <select name="sem" class="form-control" onchange="this.form.submit()">
+                                <option value="">All Semesters</option>
+                                <?php foreach ($sem_rows as $s): ?>
+                                    <option value="<?= htmlspecialchars($s) ?>" <?= ($s === $selected_sem) ? 'selected' : '' ?>><?= htmlspecialchars($s) ?></option>
+                                <?php endforeach; ?>
+                            </select>
+                            <select name="class" class="form-control" onchange="this.form.submit()">
+                                <option value="">All Classes</option>
+                                <?php foreach ($class_rows as $c): ?>
+                                    <option value="<?= htmlspecialchars($c) ?>" <?= ($c === $selected_class) ? 'selected' : '' ?>><?= htmlspecialchars($c) ?></option>
+                                <?php endforeach; ?>
+                            </select>
+                        </div>
                     </form>
                 </div>
             </div>
@@ -147,6 +221,7 @@ foreach ($mapping_tables as $tbl => $label_type) {
                                     <?php
                                     // Build a simple cell text map for easy comparison
                                     $cell_text = [];
+                                    $rowspan_tracker = [];
                                     foreach ($day_order as $dnum => $dname) {
                                         foreach ($timeslots as $ts) {
                                             $cells = $matrix[$dnum][$ts] ?? [];
@@ -155,7 +230,8 @@ foreach ($mapping_tables as $tbl => $label_type) {
                                                 $cell_text[$dnum][$ts] = '';
                                             } else {
                                                 // strip tags to compare textual content for rowspan merging
-                                                $plain = strip_tags(implode('', $cells));
+                                                // compare by joined text
+                                                $plain = implode(' | ', $cells);
                                                 $cell_text[$dnum][$ts] = $plain;
                                             }
                                         }
@@ -199,13 +275,13 @@ foreach ($mapping_tables as $tbl => $label_type) {
                                                     }
                                                 }
 
-                                                // Render cell: output original HTML entries from matrix
-                                                $html = '';
+                                                // Render cell: show each entry on its own line
                                                 $entries = $matrix[$dnum][$ts] ?? [];
                                                 if (!empty($entries)) {
-                                                    // prefer showing subject line only (first line)
-                                                    $conc = strip_tags(implode('', $entries));
-                                                    $html = htmlspecialchars($conc);
+                                                    $escaped = array_map('htmlspecialchars', $entries);
+                                                    $html = implode('<br>', $escaped);
+                                                } else {
+                                                    $html = '';
                                                 }
 
                                                 $rowspan_attr = $rowspan > 1 ? ' rowspan="' . $rowspan . '"' : '';
