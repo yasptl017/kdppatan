@@ -1,5 +1,9 @@
 <?php
 include('dbconfig.php'); // Include database connection
+$short_name_col = $conn->query("SHOW COLUMNS FROM subjects LIKE 'subjectShortName'");
+if ($short_name_col && $short_name_col->num_rows === 0) {
+    $conn->query("ALTER TABLE subjects ADD COLUMN subjectShortName VARCHAR(100) NULL AFTER subjectName");
+}
 
 // Check if user is logged in
 if (!isset($_SESSION['Name'])) {
@@ -18,11 +22,12 @@ if (isset($_GET['id'])) {
 if (isset($_POST['update_subject'])) {
     $subjectCode = $_POST['subjectCode'];
     $subjectName = $_POST['subjectName'];
+    $subjectShortName = $_POST['subjectShortName'];
     $sem = $_POST['sem'];
 
     // Update the subject data in the database
-    $stmt = $conn->prepare("UPDATE subjects SET subjectCode = ?, subjectName = ?, sem = ? WHERE id = ?");
-    $stmt->bind_param("sssi", $subjectCode, $subjectName, $sem, $id);
+    $stmt = $conn->prepare("UPDATE subjects SET subjectCode = ?, subjectName = ?, subjectShortName = ?, sem = ? WHERE id = ?");
+    $stmt->bind_param("ssssi", $subjectCode, $subjectName, $subjectShortName, $sem, $id);
     $stmt->execute();
     $stmt->close();
 
@@ -54,9 +59,13 @@ if (isset($_POST['update_subject'])) {
                                         <label class="form-label">Subject Code</label>
                                         <input type="text" name="subjectCode" class="form-control" value="<?php echo htmlspecialchars($subject['subjectCode']); ?>" required>
                                     </div>
-                                    <div class="col-12 col-md-5">
+                                    <div class="col-12 col-md-4">
                                         <label class="form-label">Subject Name</label>
                                         <input type="text" name="subjectName" class="form-control" value="<?php echo htmlspecialchars($subject['subjectName']); ?>" required>
+                                    </div>
+                                    <div class="col-12 col-md-2">
+                                        <label class="form-label">Short Name</label>
+                                        <input type="text" name="subjectShortName" class="form-control" value="<?php echo htmlspecialchars((string)($subject['subjectShortName'] ?? '')); ?>">
                                     </div>
                                     <div class="col-12 col-md-3">
                                         <label class="form-label">Semester</label>

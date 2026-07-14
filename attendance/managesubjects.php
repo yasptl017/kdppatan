@@ -1,5 +1,9 @@
 <?php
 include('dbconfig.php'); // Include database connection
+$short_name_col = $conn->query("SHOW COLUMNS FROM subjects LIKE 'subjectShortName'");
+if ($short_name_col && $short_name_col->num_rows === 0) {
+    $conn->query("ALTER TABLE subjects ADD COLUMN subjectShortName VARCHAR(100) NULL AFTER subjectName");
+}
 
 // optional message from add/update/delete redirects
 $msg = '';
@@ -11,12 +15,13 @@ if (isset($_GET['msg'])) {
 if (isset($_POST['add_subject'])) {
     $subjectCode = $_POST['subjectCode'];
     $subjectName = $_POST['subjectName'];
+    $subjectShortName = $_POST['subjectShortName'];
     $sem = $_POST['sem'];
     $status = 1; // Default status as active
 
     // Insert the subject data into the database
-    $stmt = $conn->prepare("INSERT INTO subjects (subjectCode, subjectName, sem, status) VALUES (?, ?, ?, ?)");
-    $stmt->bind_param("sssi", $subjectCode, $subjectName, $sem, $status);
+    $stmt = $conn->prepare("INSERT INTO subjects (subjectCode, subjectName, subjectShortName, sem, status) VALUES (?, ?, ?, ?, ?)");
+    $stmt->bind_param("ssssi", $subjectCode, $subjectName, $subjectShortName, $sem, $status);
     $stmt->execute();
     $stmt->close();
 }
@@ -49,12 +54,12 @@ $page = isset($_GET['page']) ? (int)$_GET['page'] : 1;
 $offset = ($page - 1) * $limit;
 
 // Query to get total records for pagination
-$total_result = $conn->query("SELECT COUNT(*) AS total FROM subjects WHERE subjectCode LIKE '%$search%' OR subjectName LIKE '%$search%'");
+$total_result = $conn->query("SELECT COUNT(*) AS total FROM subjects WHERE subjectCode LIKE '%$search%' OR subjectName LIKE '%$search%' OR subjectShortName LIKE '%$search%'");
 $total_row = $total_result->fetch_assoc();
 $total_pages = ceil($total_row['total'] / $limit);
 
 // Fetch the subject records with pagination and search
-$query = "SELECT * FROM subjects WHERE subjectCode LIKE '%$search%' OR subjectName LIKE '%$search%' LIMIT $limit OFFSET $offset";
+$query = "SELECT * FROM subjects WHERE subjectCode LIKE '%$search%' OR subjectName LIKE '%$search%' OR subjectShortName LIKE '%$search%' LIMIT $limit OFFSET $offset";
 $result = $conn->query($query);
 ?>
 
@@ -81,15 +86,19 @@ $result = $conn->query($query);
                                         <label class="form-label">Subject Code</label>
                                         <input type="text" name="subjectCode" class="form-control" placeholder="e.g. CS101" required>
                                     </div>
-                                    <div class="col-12 col-md-4">
+                                    <div class="col-12 col-md-3">
                                         <label class="form-label">Subject Name</label>
                                         <input type="text" name="subjectName" class="form-control" placeholder="Subject name" required>
+                                    </div>
+                                    <div class="col-12 col-md-2">
+                                        <label class="form-label">Short Name</label>
+                                        <input type="text" name="subjectShortName" class="form-control" placeholder="Short name">
                                     </div>
                                     <div class="col-12 col-md-2">
                                         <label class="form-label">Semester</label>
                                         <input type="text" name="sem" class="form-control" placeholder="e.g. 3" required>
                                     </div>
-                                    <div class="col-12 col-md-3 d-flex align-items-end">
+                                    <div class="col-12 col-md-2 d-flex align-items-end">
                                         <button type="submit" name="add_subject" class="btn btn-primary w-100">Add Subject</button>
                                     </div>
                                 </div>
@@ -122,6 +131,7 @@ $result = $conn->query($query);
                                         <th class="text-center">ID</th>
                                         <th class="text-center">Subject Code</th>
                                         <th class="text-center">Subject Name</th>
+                                        <th class="text-center">Short Name</th>
                                         <th class="text-center">Semester</th>
                                         <th class="text-center">Status</th>
                                         <th class="text-center">Actions</th>
@@ -133,6 +143,7 @@ $result = $conn->query($query);
                                             <td class="text-center"><?php echo $row['id']; ?></td>
                                             <td><?php echo $row['subjectCode']; ?></td>
                                             <td><?php echo $row['subjectName']; ?></td>
+                                            <td><?php echo htmlspecialchars((string)($row['subjectShortName'] ?? '')); ?></td>
                                             <td><?php echo $row['sem']; ?></td>
                                             <td class="text-center"><?php echo $row['status'] == 1 ? 'Active' : 'Disabled'; ?></td>
                                             <td class="text-center">

@@ -20,6 +20,21 @@ $default_term = $term_rows[0] ?? '';
 $requested_term = isset($_GET['term']) ? trim((string)$_GET['term']) : '';
 $selected_term = in_array($requested_term, $term_rows, true) ? $requested_term : $default_term;
 
+$subject_short_names = [];
+$short_name_col = $conn->query("SHOW COLUMNS FROM subjects LIKE 'subjectShortName'");
+if ($short_name_col && $short_name_col->num_rows > 0) {
+    $subject_result = $conn->query("SELECT subjectName, subjectShortName FROM subjects");
+    if ($subject_result) {
+        while ($row = $subject_result->fetch_assoc()) {
+            $subject_name = trim((string)($row['subjectName'] ?? ''));
+            $short_name = trim((string)($row['subjectShortName'] ?? ''));
+            if ($subject_name !== '' && $short_name !== '') {
+                $subject_short_names[$subject_name] = $short_name;
+            }
+        }
+    }
+}
+
 $timeslots = [
     '10:30 - 11:30',
     '11:30 - 12:30',
@@ -126,7 +141,11 @@ function values_for_day(string $stored, int $day): array {
     return [$stored];
 }
 
-function build_timetable_matrix($conn, string $term, string $sem, string $class, array $lab_batches, array $tut_batches, array $timeslots, array $day_order): array {
+function timetable_subject_name(string $subject, array $subject_short_names): string {
+    return $subject_short_names[$subject] ?? $subject;
+}
+
+function build_timetable_matrix($conn, string $term, string $sem, string $class, array $lab_batches, array $tut_batches, array $timeslots, array $day_order, array $subject_short_names): array {
     $matrix = blank_matrix($timeslots, $day_order);
 
     $stmt = $conn->prepare("SELECT m.*, f.Name AS faculty_name FROM lecmapping m LEFT JOIN faculty f ON f.id = m.faculty WHERE m.term = ? AND m.sem = ? AND TRIM(m.class) = ? ORDER BY m.start_date DESC, m.id DESC");
@@ -135,7 +154,7 @@ function build_timetable_matrix($conn, string $term, string $sem, string $class,
         $stmt->execute();
         $res = $stmt->get_result();
         while ($row = $res->fetch_assoc()) {
-            $subject = trim((string)($row['subject'] ?? ''));
+            $subject = timetable_subject_name(trim((string)($row['subject'] ?? '')), $subject_short_names);
             $faculty = trim((string)($row['faculty_name'] ?? ''));
             $label = sprintf('lec - %s - %s - %s', $subject, $class, $faculty);
 
@@ -155,7 +174,7 @@ function build_timetable_matrix($conn, string $term, string $sem, string $class,
         $stmt->execute();
         $res = $stmt->get_result();
         while ($row = $res->fetch_assoc()) {
-            $subject = trim((string)($row['subject'] ?? ''));
+            $subject = timetable_subject_name(trim((string)($row['subject'] ?? '')), $subject_short_names);
             $faculty = trim((string)($row['faculty_name'] ?? ''));
 
             foreach (day_slots_from_row($row) as $day => $slot) {
@@ -181,7 +200,7 @@ function build_timetable_matrix($conn, string $term, string $sem, string $class,
         $stmt->execute();
         $res = $stmt->get_result();
         while ($row = $res->fetch_assoc()) {
-            $subject = trim((string)($row['subject'] ?? ''));
+            $subject = timetable_subject_name(trim((string)($row['subject'] ?? '')), $subject_short_names);
             $faculty = trim((string)($row['faculty_name'] ?? ''));
 
             foreach (day_slots_from_row($row) as $day => $slot) {
@@ -326,7 +345,8 @@ foreach ($timetable_groups as &$group) {
         $group['lab_batches'],
         $group['tut_batches'],
         $timeslots,
-        $day_order
+        $day_order,
+        $subject_short_names
     );
 }
 unset($group);
