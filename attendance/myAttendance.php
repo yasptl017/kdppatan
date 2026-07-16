@@ -1138,7 +1138,8 @@ $day_names = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
                                     elseif (!$slot['filled'] && $is_today) $row_class = 'row-today';
                                     elseif (!$slot['filled']) $row_class = 'row-pending';
                                 ?>
-                                <tr class="<?= $row_class ?>">
+                                <?php $row_clickable = !$slot['skipped'] && !$slot['filled']; ?>
+                                <tr class="<?= $row_class ?><?= $row_clickable ? ' row-clickable' : '' ?>"<?= $row_clickable ? ' data-take-url="' . htmlspecialchars($take_url) . '"' : '' ?>>
                                     <td class="text-center col-num"><span class="row-num"><?= $i + 1 ?></span></td>
                                     <td class="text-center col-type">
                                         <span class="type-pill <?= $type_pill_class ?>" title="<?= ucfirst($type_pill_label) ?>"><i class="bi <?= $type_pill_icon ?>"></i><?= $type_pill_label ?></span>
@@ -1960,6 +1961,10 @@ $day_names = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
     background: linear-gradient(90deg, rgba(254, 243, 199, 0.55) 0%, rgba(254, 243, 199, 0.15) 100%) !important;
 }
 
+.row-clickable {
+    cursor: pointer;
+}
+
 .row-skipped td {
     opacity: 0.55;
 }
@@ -2383,7 +2388,21 @@ $day_names = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 <script>
 document.addEventListener('DOMContentLoaded', function () {
     const tableElement = document.getElementById('attendanceDataTable');
-    if (!tableElement || typeof window.jQuery === 'undefined' || typeof jQuery.fn.DataTable === 'undefined') {
+    if (!tableElement) {
+        return;
+    }
+
+    // Clicking anywhere on a pending row opens its Take Attendance page,
+    // except when the click lands on an action button/link inside the row.
+    tableElement.addEventListener('click', function (e) {
+        if (e.target.closest('a, button, form, input')) return;
+        const row = e.target.closest('tr[data-take-url]');
+        if (row) {
+            window.location.href = row.dataset.takeUrl;
+        }
+    });
+
+    if (typeof window.jQuery === 'undefined' || typeof jQuery.fn.DataTable === 'undefined') {
         return;
     }
 
