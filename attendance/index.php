@@ -6,7 +6,7 @@ if (trim((string)($_SESSION['Name'] ?? '')) !== '') {
 }
 
 include('dbconfig.php');
-if ($_SERVER['REQUEST_METHOD'] == 'POST') {
+if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['username'])) {
     $username = $_POST['username'];
     $password = $_POST['signin-password'];
 
@@ -35,6 +35,112 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
     }
 
     $stmt->close();
+}
+
+// ── Student attendance check (public, enrollment number only) ────────────────
+// Shows ONLY the final combined percentage (lectures + labs + tutorials).
+$att_check_enrollment = trim((string)($_POST['check_enrollment'] ?? ''));
+$att_check_pct = null;
+$att_check_error = '';
+
+if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['check_enrollment'])) {
+    if ($att_check_enrollment === '') {
+        $att_check_error = 'Please enter your enrollment number.';
+    } else {
+        // Latest term record for this enrollment (a student can appear in
+        // multiple terms; the most recent one is the active one).
+        $stu_stmt = $conn->prepare("SELECT id, enrollmentNo, term, sem, class, labBatch, tutBatch FROM students WHERE enrollmentNo = ? ORDER BY term DESC LIMIT 1");
+        $stu_stmt->bind_param('s', $att_check_enrollment);
+        $stu_stmt->execute();
+        $att_student = $stu_stmt->get_result()->fetch_assoc();
+        $stu_stmt->close();
+
+        if (!$att_student) {
+            $att_check_error = 'No student found with that enrollment number.';
+        } else {
+            $stu_id    = trim((string)$att_student['id']);
+            $stu_enr   = trim((string)$att_student['enrollmentNo']);
+            $stu_term  = (string)$att_student['term'];
+            $stu_sem   = (string)$att_student['sem'];
+            $stu_class = trim((string)$att_student['class']);
+            $stu_lab_batch = strtoupper(trim((string)$att_student['labBatch']));
+            $stu_tut_batch = strtoupper(trim((string)$att_student['tutBatch']));
+
+            // presentNo holds enrollment numbers (or legacy student ids)
+            $is_present = function ($presentNo) use ($stu_enr, $stu_id) {
+                foreach (explode(',', (string)$presentNo) as $token) {
+                    $token = trim($token);
+                    if ($token !== '' && ($token === $stu_enr || $token === $stu_id)) {
+                        return true;
+                    }
+                }
+                return false;
+            };
+            // batch column can hold a CSV of batches
+            $batch_matches = function ($batchCsv, $stuBatch) {
+                if ($stuBatch === '') {
+                    return false;
+                }
+                foreach (explode(',', (string)$batchCsv) as $token) {
+                    if (strtoupper(trim($token)) === $stuBatch) {
+                        return true;
+                    }
+                }
+                return false;
+            };
+
+            $att_total = 0;
+            $att_present = 0;
+
+            $lec_stmt = $conn->prepare("SELECT presentNo FROM lecattendance WHERE term = ? AND sem = ? AND class = ?");
+            $lec_stmt->bind_param('sss', $stu_term, $stu_sem, $stu_class);
+            $lec_stmt->execute();
+            $lec_res = $lec_stmt->get_result();
+            while ($lec_row = $lec_res->fetch_assoc()) {
+                $att_total++;
+                if ($is_present($lec_row['presentNo'] ?? '')) {
+                    $att_present++;
+                }
+            }
+            $lec_stmt->close();
+
+            $lab_stmt = $conn->prepare("SELECT batch, presentNo FROM labattendance WHERE term = ? AND sem = ? AND COALESCE(TRIM(labNo), '') <> ''");
+            $lab_stmt->bind_param('ss', $stu_term, $stu_sem);
+            $lab_stmt->execute();
+            $lab_res = $lab_stmt->get_result();
+            while ($lab_row = $lab_res->fetch_assoc()) {
+                if (!$batch_matches($lab_row['batch'] ?? '', $stu_lab_batch)) {
+                    continue;
+                }
+                $att_total++;
+                if ($is_present($lab_row['presentNo'] ?? '')) {
+                    $att_present++;
+                }
+            }
+            $lab_stmt->close();
+
+            $tut_stmt = $conn->prepare("SELECT batch, presentNo FROM tutattendance WHERE term = ? AND sem = ?");
+            $tut_stmt->bind_param('ss', $stu_term, $stu_sem);
+            $tut_stmt->execute();
+            $tut_res = $tut_stmt->get_result();
+            while ($tut_row = $tut_res->fetch_assoc()) {
+                if (!$batch_matches($tut_row['batch'] ?? '', $stu_tut_batch)) {
+                    continue;
+                }
+                $att_total++;
+                if ($is_present($tut_row['presentNo'] ?? '')) {
+                    $att_present++;
+                }
+            }
+            $tut_stmt->close();
+
+            if ($att_total === 0) {
+                $att_check_error = 'No attendance records found yet for this enrollment number.';
+            } else {
+                $att_check_pct = ($att_present * 100) / $att_total;
+            }
+        }
+    }
 }
 
 $conn->close();
@@ -261,6 +367,67 @@ $conn->close();
             transform: translateY(-1px);
             box-shadow: 0 4px 12px rgba(57,73,171,0.3);
         }
+        /* Student attendance check */
+        .att-check-form .input-group {
+            align-items: stretch;
+        }
+        .att-check-form .form-control {
+            height: 46px;
+            border-top-right-radius: 0;
+            border-bottom-right-radius: 0;
+            border-right: 0;
+        }
+        .att-check-form .form-control:focus {
+            z-index: 1;
+        }
+        .att-check-form .att-check-btn {
+            height: 46px;
+            padding: 0 1.15rem;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            white-space: nowrap;
+            font-size: 0.95rem;
+            border-top-left-radius: 0;
+            border-bottom-left-radius: 0;
+        }
+        .att-check-form .att-check-btn:hover,
+        .att-check-form .att-check-btn:focus {
+            transform: none;
+            box-shadow: 0 2px 8px rgba(57, 73, 171, 0.25);
+        }
+        .att-check-result {
+            margin-top: 1rem;
+            border-radius: 0.6rem;
+            padding: 1rem;
+            text-align: center;
+        }
+        .att-check-result-label {
+            font-size: 0.8rem;
+            font-weight: 600;
+            opacity: 0.8;
+            margin-bottom: 0.15rem;
+        }
+        .att-check-result-value {
+            font-size: 2.2rem;
+            font-weight: 800;
+            line-height: 1.1;
+        }
+        .att-pct-good {
+            background: #ecfdf5;
+            border: 1px solid #6ee7b7;
+            color: #047857;
+        }
+        .att-pct-warn {
+            background: #fffbeb;
+            border: 1px solid #fcd34d;
+            color: #b45309;
+        }
+        .att-pct-low {
+            background: #fef2f2;
+            border: 1px solid #fca5a5;
+            color: #b91c1c;
+        }
         @media (max-width: 767.98px) {
             .login-left { display: none; }
             .login-right { padding: 1.5rem 1rem; background: #f8f9fc; min-height: 100vh; }
@@ -341,6 +508,34 @@ $conn->close();
                         <div class="alert alert-danger mt-3 mb-0" style="border-radius:0.5rem;font-size:0.875rem;">
                             
                             <?php echo htmlspecialchars($error_message); ?>
+                        </div>
+                    <?php endif; ?>
+                </div>
+
+                <div class="login-card mt-3" id="att-check">
+                    <h2 style="font-size:1.15rem;"><i class="bi bi-mortarboard me-1"></i>Student Corner</h2>
+                    <p class="subtitle" style="margin-bottom:1rem;">Check your overall attendance percentage</p>
+
+                    <form method="POST" action="index.php#att-check" class="att-check-form">
+                        <div class="input-group">
+                            <input type="text" name="check_enrollment" class="form-control"
+                                   placeholder="Enter Enrollment No."
+                                   value="<?php echo htmlspecialchars($att_check_enrollment); ?>" required>
+                            <button type="submit" class="btn btn-login att-check-btn">
+                                <i class="bi bi-search me-1"></i>Check
+                            </button>
+                        </div>
+                    </form>
+
+                    <?php if ($att_check_pct !== null): ?>
+                        <?php $att_pct_class = $att_check_pct >= 75 ? 'att-pct-good' : ($att_check_pct >= 60 ? 'att-pct-warn' : 'att-pct-low'); ?>
+                        <div class="att-check-result <?php echo $att_pct_class; ?>">
+                            <div class="att-check-result-label">Attendance of <?php echo htmlspecialchars($att_check_enrollment); ?></div>
+                            <div class="att-check-result-value"><?php echo number_format($att_check_pct, 2); ?>%</div>
+                        </div>
+                    <?php elseif ($att_check_error !== ''): ?>
+                        <div class="alert alert-warning mt-3 mb-0" style="border-radius:0.5rem;font-size:0.875rem;">
+                            <?php echo htmlspecialchars($att_check_error); ?>
                         </div>
                     <?php endif; ?>
                 </div>
