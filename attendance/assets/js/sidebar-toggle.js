@@ -10,14 +10,18 @@ document.addEventListener("DOMContentLoaded", () => {
   if (!appSidepanel) return;
 
   const SIDEBAR_STATE_KEY = "sidebar_collapsed";
-  const MOBILE_TOGGLE_KEY = "sidebar_mobile_user_opened";
 
   // Track the user's explicit intent on mobile. We DO NOT auto-open the
   // sidebar from resize/layout changes — only an actual click on the
-  // hamburger (#sidepanel-toggler) or the close X can flip this flag.
+  // hamburger (#sidepanel-toggler) can flip this flag. The mobile sidebar
+  // is an overlay: it must ALWAYS start closed on a fresh page load, so
+  // this state is deliberately NOT persisted across navigations.
   let isDesktopLayout = window.innerWidth >= 1200;
-  let mobileUserOpened =
-    localStorage.getItem(MOBILE_TOGGLE_KEY) === "true";
+  let mobileUserOpened = false;
+
+  // Clean up the stale persistence key from older versions — it caused the
+  // sidebar to re-open itself after every page navigation on mobile.
+  try { localStorage.removeItem("sidebar_mobile_user_opened"); } catch (e) {}
 
   // Detect virtual-keyboard-driven viewport changes (innerHeight shrinks
   // dramatically while innerWidth stays roughly the same). These must NOT
@@ -81,7 +85,6 @@ document.addEventListener("DOMContentLoaded", () => {
     }
     setMobileToggleAria(true);
     mobileUserOpened = true;
-    try { localStorage.setItem(MOBILE_TOGGLE_KEY, "true"); } catch (e) {}
   }
 
   function closeMobileSidebar() {
@@ -94,7 +97,6 @@ document.addEventListener("DOMContentLoaded", () => {
     }
     setMobileToggleAria(false);
     mobileUserOpened = false;
-    try { localStorage.setItem(MOBILE_TOGGLE_KEY, "false"); } catch (e) {}
   }
 
   function toggleSidebar() {
@@ -114,13 +116,9 @@ document.addEventListener("DOMContentLoaded", () => {
         expandSidebar();
       }
     } else {
-      // Mobile: only show the sidebar if the user explicitly opened it
-      // during THIS session. Do NOT honor expandSidebar() defaults.
-      if (mobileUserOpened) {
-        openMobileSidebar();
-      } else {
-        closeMobileSidebar();
-      }
+      // Mobile: the sidebar is an overlay — it always starts closed on a
+      // page load. Only a hamburger tap during THIS page's lifetime opens it.
+      closeMobileSidebar();
     }
   }
 
@@ -335,6 +333,37 @@ document.addEventListener("DOMContentLoaded", () => {
     };
     sidepanelClose.addEventListener("click", guardClick(origHandler));
   }
+
+  // ── Backdrop tap — close directly, WITHOUT the scroll-guard ────────
+  // The backdrop only exists while the sidebar is open and covers the whole
+  // page, so a tap on it is always an explicit "close" intent. Routing it
+  // through the guarded close-button click (app.js does that) meant a tap
+  // right after scrolling the menu was silently swallowed and the sidebar
+  // appeared stuck open.
+  if (sidepanelDrop) {
+    sidepanelDrop.addEventListener("click", (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      if (window.innerWidth < 1200) {
+        closeMobileSidebar();
+      }
+    });
+  }
+
+  // ── Nav link tap — close the overlay before navigating ─────────────
+  // Submenu toggles (href="#", data-bs-toggle) stay open; only real page
+  // links close the sidebar so the next page never shows a lingering
+  // overlay while loading.
+  appSidepanel.addEventListener("click", (e) => {
+    if (window.innerWidth >= 1200) return;
+    const link = e.target.closest("a[href]");
+    if (!link) return;
+    const href = link.getAttribute("href") || "";
+    if (href === "" || href === "#" || link.hasAttribute("data-bs-toggle")) {
+      return;
+    }
+    closeMobileSidebar();
+  });
 
   // ── Safety net: MutationObserver catches any rogue `sidepanel-visible`
   // class added by other code on mobile and forces it off unless the user

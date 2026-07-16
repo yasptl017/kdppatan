@@ -88,7 +88,8 @@ function download_attendance_analysis_excel($rows, $filters, $students_count) {
     $sheet->mergeCells('A1:G1');
     $sheet->setCellValue('A1', 'Attendance Analysis Report');
     $sheet->mergeCells('A2:G2');
-    $sheet->setCellValue('A2', 'Semester: ' . $filters['sem'] . '    Class: ' . $filters['class']);
+    $subject_line = ($filters['subject'] !== '') ? '    Subject: ' . $filters['subject'] : '    Subject: All Subjects';
+    $sheet->setCellValue('A2', 'Semester: ' . $filters['sem'] . '    Class: ' . $filters['class'] . $subject_line);
     $sheet->mergeCells('A3:G3');
     $sheet->setCellValue('A3', 'Date Range: ' . $filters['start_date'] . ' to ' . $filters['end_date'] . '    Students: ' . $students_count);
 
@@ -135,7 +136,8 @@ function download_attendance_analysis_excel($rows, $filters, $students_count) {
     $sheet->getColumnDimension('G')->setWidth(18);
     $sheet->freezePane('A6');
 
-    $filename = 'attendance_analysis_sem' . $filters['sem'] . '_class' . $filters['class'] . '_' . $filters['start_date'] . '_to_' . $filters['end_date'] . '.xlsx';
+    $subject_part = ($filters['subject'] !== '') ? '_' . $filters['subject'] : '';
+    $filename = 'attendance_analysis_sem' . $filters['sem'] . '_class' . $filters['class'] . $subject_part . '_' . $filters['start_date'] . '_to_' . $filters['end_date'] . '.xlsx';
     $filename = preg_replace('/[^A-Za-z0-9_\-.]/', '_', $filename);
 
     header('Content-Type: application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
@@ -149,6 +151,7 @@ function download_attendance_analysis_excel($rows, $filters, $students_count) {
 
 $sem = trim((string)($_GET['sem'] ?? ''));
 $class = strtoupper(trim((string)($_GET['class'] ?? '')));
+$subject = trim((string)($_GET['subject'] ?? ''));   // '' = all subjects (overall analysis)
 $start_date = trim((string)($_GET['start_date'] ?? ''));
 $end_date = trim((string)($_GET['end_date'] ?? ''));
 $export = strtolower(trim((string)($_GET['export'] ?? '')));
@@ -159,6 +162,19 @@ $students_count = 0;
 
 $sem_result = $conn->query("SELECT sem FROM semester WHERE status = 1 ORDER BY sem");
 $allowed_classes = ['A', 'B', 'C', 'D'];
+
+// Subjects for the dropdown (filtered client-side by the chosen semester)
+$subject_options = [];
+$subject_opt_result = $conn->query("SELECT subjectName, subjectCode, sem FROM subjects WHERE status = 1 ORDER BY sem, subjectName");
+if ($subject_opt_result) {
+    while ($subject_opt_row = $subject_opt_result->fetch_assoc()) {
+        $subject_options[] = [
+            'subjectName' => (string)$subject_opt_row['subjectName'],
+            'subjectCode' => (string)$subject_opt_row['subjectCode'],
+            'sem'         => (string)$subject_opt_row['sem'],
+        ];
+    }
+}
 
 $hasFilterInput = ($sem !== '' || $class !== '' || $start_date !== '' || $end_date !== '');
 if ($hasFilterInput) {
@@ -232,8 +248,13 @@ if ($hasFilterInput) {
             if ($students_count === 0) {
                 $msg = 'No students found for selected semester and class.';
             } else {
-                $lecStmt = $conn->prepare("SELECT date, presentNo FROM lecattendance WHERE sem = ? AND class = ? ORDER BY id ASC");
-                $lecStmt->bind_param('ss', $sem, $class);
+                if ($subject !== '') {
+                    $lecStmt = $conn->prepare("SELECT date, presentNo FROM lecattendance WHERE sem = ? AND class = ? AND subject = ? ORDER BY id ASC");
+                    $lecStmt->bind_param('sss', $sem, $class, $subject);
+                } else {
+                    $lecStmt = $conn->prepare("SELECT date, presentNo FROM lecattendance WHERE sem = ? AND class = ? ORDER BY id ASC");
+                    $lecStmt->bind_param('ss', $sem, $class);
+                }
                 $lecStmt->execute();
                 $lecRes = $lecStmt->get_result();
                 while ($lec = $lecRes->fetch_assoc()) {
@@ -252,8 +273,13 @@ if ($hasFilterInput) {
                 }
                 $lecStmt->close();
 
-                $labStmt = $conn->prepare("SELECT date, batch, presentNo FROM labattendance WHERE sem = ? AND COALESCE(TRIM(labNo), '') <> '' ORDER BY id ASC");
-                $labStmt->bind_param('s', $sem);
+                if ($subject !== '') {
+                    $labStmt = $conn->prepare("SELECT date, batch, presentNo FROM labattendance WHERE sem = ? AND subject = ? AND COALESCE(TRIM(labNo), '') <> '' ORDER BY id ASC");
+                    $labStmt->bind_param('ss', $sem, $subject);
+                } else {
+                    $labStmt = $conn->prepare("SELECT date, batch, presentNo FROM labattendance WHERE sem = ? AND COALESCE(TRIM(labNo), '') <> '' ORDER BY id ASC");
+                    $labStmt->bind_param('s', $sem);
+                }
                 $labStmt->execute();
                 $labRes = $labStmt->get_result();
                 while ($lab = $labRes->fetch_assoc()) {
@@ -282,8 +308,13 @@ if ($hasFilterInput) {
                 }
                 $labStmt->close();
 
-                $tutStmt = $conn->prepare("SELECT date, batch, presentNo FROM tutattendance WHERE sem = ? ORDER BY id ASC");
-                $tutStmt->bind_param('s', $sem);
+                if ($subject !== '') {
+                    $tutStmt = $conn->prepare("SELECT date, batch, presentNo FROM tutattendance WHERE sem = ? AND subject = ? ORDER BY id ASC");
+                    $tutStmt->bind_param('ss', $sem, $subject);
+                } else {
+                    $tutStmt = $conn->prepare("SELECT date, batch, presentNo FROM tutattendance WHERE sem = ? ORDER BY id ASC");
+                    $tutStmt->bind_param('s', $sem);
+                }
                 $tutStmt->execute();
                 $tutRes = $tutStmt->get_result();
                 while ($tut = $tutRes->fetch_assoc()) {
@@ -339,6 +370,7 @@ if ($hasFilterInput) {
                     download_attendance_analysis_excel($rows, [
                         'sem' => $sem,
                         'class' => $class,
+                        'subject' => $subject,
                         'start_date' => $start_date,
                         'end_date' => $end_date,
                     ], $students_count);
@@ -384,6 +416,12 @@ if ($hasFilterInput) {
                                 </select>
                             </div>
                             <div class="col-12 col-md-3">
+                                <label class="form-label">Subject</label>
+                                <select name="subject" id="subjectFilter" class="form-control">
+                                    <option value="">All Subjects (Overall)</option>
+                                </select>
+                            </div>
+                            <div class="col-12 col-md-3">
                                 <label class="form-label">Start Date</label>
                                 <input type="date" name="start_date" class="form-control" value="<?= htmlspecialchars($start_date); ?>" required>
                             </div>
@@ -400,6 +438,7 @@ if ($hasFilterInput) {
                     </form>
                     <p class="text-muted mb-0 mt-3" style="font-size:0.85rem;">
                         Total attendance % is calculated from combined conducted sessions (lecture + lab + tutorial). Components with zero conducted sessions are not treated as 0%.
+                        Select a subject to analyse only that subject's lectures, labs, and tutorials; leave it on "All Subjects" for the overall analysis.
                     </p>
                 </div>
             </div>
@@ -412,12 +451,20 @@ if ($hasFilterInput) {
                 <div class="app-card shadow-sm">
                     <div class="app-card-body">
                         <div class="d-flex justify-content-between align-items-center flex-wrap mb-2">
-                            <h4 class="mb-0">Result</h4>
+                            <h4 class="mb-0">
+                                Result
+                                <?php if ($subject !== ''): ?>
+                                    <span class="badge bg-primary-subtle text-primary border border-primary-subtle ms-1" style="font-size:0.72rem; vertical-align:middle;"><?= htmlspecialchars($subject); ?></span>
+                                <?php else: ?>
+                                    <span class="badge bg-secondary-subtle text-secondary border border-secondary-subtle ms-1" style="font-size:0.72rem; vertical-align:middle;">All Subjects</span>
+                                <?php endif; ?>
+                            </h4>
                             <div class="d-flex align-items-center flex-wrap gap-2">
                                 <span class="text-muted" style="font-size:0.875rem;">Students: <?= (int)$students_count; ?></span>
                                 <a href="attendanceAnalysis.php?<?= htmlspecialchars(http_build_query([
                                     'sem' => $sem,
                                     'class' => $class,
+                                    'subject' => $subject,
                                     'start_date' => $start_date,
                                     'end_date' => $end_date,
                                     'export' => 'excel',
@@ -462,6 +509,38 @@ if ($hasFilterInput) {
         </div>
     </div>
 </div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+    const subjectsData = <?= json_encode($subject_options, JSON_UNESCAPED_UNICODE) ?>;
+    const selectedSubject = <?= json_encode($subject, JSON_UNESCAPED_UNICODE) ?>;
+
+    const semSelect = document.querySelector('select[name="sem"]');
+    const subjectSelect = document.getElementById('subjectFilter');
+    if (!semSelect || !subjectSelect) return;
+
+    function refreshSubjects() {
+        const sem = semSelect.value;
+        const current = subjectSelect.value || selectedSubject;
+        subjectSelect.innerHTML = '';
+        const allOpt = document.createElement('option');
+        allOpt.value = '';
+        allOpt.textContent = 'All Subjects (Overall)';
+        subjectSelect.appendChild(allOpt);
+        subjectsData.forEach(function (s) {
+            if (sem !== '' && String(s.sem) !== String(sem)) return;
+            const opt = document.createElement('option');
+            opt.value = s.subjectName;
+            opt.textContent = s.subjectName + (s.subjectCode ? ' (' + s.subjectCode + ')' : '');
+            if (String(s.subjectName) === String(current)) opt.selected = true;
+            subjectSelect.appendChild(opt);
+        });
+    }
+
+    semSelect.addEventListener('change', refreshSubjects);
+    refreshSubjects();
+});
+</script>
 
 <?php include('footer.php'); ?>
 </body>
