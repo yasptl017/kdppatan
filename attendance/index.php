@@ -38,39 +38,31 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['username'])) {
 }
 
 // ── Student attendance check (public, enrollment number only) ────────────────
-// Shows ONLY the final combined percentage (lectures + labs + tutorials).
+// Shows subject-wise attendance percentage (lectures + labs + tutorials
+// combined per subject, no counts) grouped by term.
 $att_check_enrollment = trim((string)($_POST['check_enrollment'] ?? ''));
-$att_check_pct = null;
+$att_check_terms = [];
 $att_check_error = '';
 
 if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['check_enrollment'])) {
     if ($att_check_enrollment === '') {
         $att_check_error = 'Please enter your enrollment number.';
     } else {
-        // Latest term record for this enrollment (a student can appear in
-        // multiple terms; the most recent one is the active one).
-        $stu_stmt = $conn->prepare("SELECT id, enrollmentNo, term, sem, class, labBatch, tutBatch FROM students WHERE enrollmentNo = ? ORDER BY term DESC LIMIT 1");
+        // A student can appear in multiple terms; show all of them.
+        $stu_stmt = $conn->prepare("SELECT id, enrollmentNo, term, sem, class, labBatch, tutBatch FROM students WHERE enrollmentNo = ? ORDER BY term DESC");
         $stu_stmt->bind_param('s', $att_check_enrollment);
         $stu_stmt->execute();
-        $att_student = $stu_stmt->get_result()->fetch_assoc();
+        $att_students = $stu_stmt->get_result()->fetch_all(MYSQLI_ASSOC);
         $stu_stmt->close();
 
-        if (!$att_student) {
+        if (empty($att_students)) {
             $att_check_error = 'No student found with that enrollment number.';
         } else {
-            $stu_id    = trim((string)$att_student['id']);
-            $stu_enr   = trim((string)$att_student['enrollmentNo']);
-            $stu_term  = (string)$att_student['term'];
-            $stu_sem   = (string)$att_student['sem'];
-            $stu_class = trim((string)$att_student['class']);
-            $stu_lab_batch = strtoupper(trim((string)$att_student['labBatch']));
-            $stu_tut_batch = strtoupper(trim((string)$att_student['tutBatch']));
-
             // presentNo holds enrollment numbers (or legacy student ids)
-            $is_present = function ($presentNo) use ($stu_enr, $stu_id) {
+            $is_present = function ($presentNo, $stuEnr, $stuId) {
                 foreach (explode(',', (string)$presentNo) as $token) {
                     $token = trim($token);
-                    if ($token !== '' && ($token === $stu_enr || $token === $stu_id)) {
+                    if ($token !== '' && ($token === $stuEnr || $token === $stuId)) {
                         return true;
                     }
                 }
@@ -89,55 +81,80 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['check_enrollment'])) {
                 return false;
             };
 
-            $att_total = 0;
-            $att_present = 0;
+            foreach ($att_students as $att_student) {
+                $stu_id    = trim((string)$att_student['id']);
+                $stu_enr   = trim((string)$att_student['enrollmentNo']);
+                $stu_term  = (string)$att_student['term'];
+                $stu_sem   = (string)$att_student['sem'];
+                $stu_class = trim((string)$att_student['class']);
+                $stu_lab_batch = strtoupper(trim((string)$att_student['labBatch']));
+                $stu_tut_batch = strtoupper(trim((string)$att_student['tutBatch']));
 
-            $lec_stmt = $conn->prepare("SELECT presentNo FROM lecattendance WHERE term = ? AND sem = ? AND class = ?");
-            $lec_stmt->bind_param('sss', $stu_term, $stu_sem, $stu_class);
-            $lec_stmt->execute();
-            $lec_res = $lec_stmt->get_result();
-            while ($lec_row = $lec_res->fetch_assoc()) {
-                $att_total++;
-                if ($is_present($lec_row['presentNo'] ?? '')) {
-                    $att_present++;
+                // subject => ['total' => n, 'present' => n]
+                $subject_totals = [];
+                $bump = function ($subject, $present) use (&$subject_totals) {
+                    $subject = trim((string)$subject) === '' ? 'Unknown Subject' : trim((string)$subject);
+                    if (!isset($subject_totals[$subject])) {
+                        $subject_totals[$subject] = ['total' => 0, 'present' => 0];
+                    }
+                    $subject_totals[$subject]['total']++;
+                    if ($present) {
+                        $subject_totals[$subject]['present']++;
+                    }
+                };
+
+                $lec_stmt = $conn->prepare("SELECT subject, presentNo FROM lecattendance WHERE term = ? AND sem = ? AND class = ?");
+                $lec_stmt->bind_param('sss', $stu_term, $stu_sem, $stu_class);
+                $lec_stmt->execute();
+                $lec_res = $lec_stmt->get_result();
+                while ($lec_row = $lec_res->fetch_assoc()) {
+                    $bump($lec_row['subject'] ?? '', $is_present($lec_row['presentNo'] ?? '', $stu_enr, $stu_id));
+                }
+                $lec_stmt->close();
+
+                $lab_stmt = $conn->prepare("SELECT subject, batch, presentNo FROM labattendance WHERE term = ? AND sem = ? AND COALESCE(TRIM(labNo), '') <> ''");
+                $lab_stmt->bind_param('ss', $stu_term, $stu_sem);
+                $lab_stmt->execute();
+                $lab_res = $lab_stmt->get_result();
+                while ($lab_row = $lab_res->fetch_assoc()) {
+                    if (!$batch_matches($lab_row['batch'] ?? '', $stu_lab_batch)) {
+                        continue;
+                    }
+                    $bump($lab_row['subject'] ?? '', $is_present($lab_row['presentNo'] ?? '', $stu_enr, $stu_id));
+                }
+                $lab_stmt->close();
+
+                $tut_stmt = $conn->prepare("SELECT subject, batch, presentNo FROM tutattendance WHERE term = ? AND sem = ?");
+                $tut_stmt->bind_param('ss', $stu_term, $stu_sem);
+                $tut_stmt->execute();
+                $tut_res = $tut_stmt->get_result();
+                while ($tut_row = $tut_res->fetch_assoc()) {
+                    if (!$batch_matches($tut_row['batch'] ?? '', $stu_tut_batch)) {
+                        continue;
+                    }
+                    $bump($tut_row['subject'] ?? '', $is_present($tut_row['presentNo'] ?? '', $stu_enr, $stu_id));
+                }
+                $tut_stmt->close();
+
+                if (!empty($subject_totals)) {
+                    ksort($subject_totals, SORT_NATURAL | SORT_FLAG_CASE);
+                    $subject_rows = [];
+                    foreach ($subject_totals as $subjectName => $counts) {
+                        $subject_rows[] = [
+                            'subject' => $subjectName,
+                            'percentage' => $counts['total'] > 0 ? ($counts['present'] * 100) / $counts['total'] : 0,
+                        ];
+                    }
+                    $att_check_terms[] = [
+                        'term' => $stu_term,
+                        'sem' => $stu_sem,
+                        'subjects' => $subject_rows,
+                    ];
                 }
             }
-            $lec_stmt->close();
 
-            $lab_stmt = $conn->prepare("SELECT batch, presentNo FROM labattendance WHERE term = ? AND sem = ? AND COALESCE(TRIM(labNo), '') <> ''");
-            $lab_stmt->bind_param('ss', $stu_term, $stu_sem);
-            $lab_stmt->execute();
-            $lab_res = $lab_stmt->get_result();
-            while ($lab_row = $lab_res->fetch_assoc()) {
-                if (!$batch_matches($lab_row['batch'] ?? '', $stu_lab_batch)) {
-                    continue;
-                }
-                $att_total++;
-                if ($is_present($lab_row['presentNo'] ?? '')) {
-                    $att_present++;
-                }
-            }
-            $lab_stmt->close();
-
-            $tut_stmt = $conn->prepare("SELECT batch, presentNo FROM tutattendance WHERE term = ? AND sem = ?");
-            $tut_stmt->bind_param('ss', $stu_term, $stu_sem);
-            $tut_stmt->execute();
-            $tut_res = $tut_stmt->get_result();
-            while ($tut_row = $tut_res->fetch_assoc()) {
-                if (!$batch_matches($tut_row['batch'] ?? '', $stu_tut_batch)) {
-                    continue;
-                }
-                $att_total++;
-                if ($is_present($tut_row['presentNo'] ?? '')) {
-                    $att_present++;
-                }
-            }
-            $tut_stmt->close();
-
-            if ($att_total === 0) {
+            if (empty($att_check_terms)) {
                 $att_check_error = 'No attendance records found yet for this enrollment number.';
-            } else {
-                $att_check_pct = ($att_present * 100) / $att_total;
             }
         }
     }
@@ -396,22 +413,45 @@ $conn->close();
             transform: none;
             box-shadow: 0 2px 8px rgba(57, 73, 171, 0.25);
         }
-        .att-check-result {
+        .att-check-result-wrap {
             margin-top: 1rem;
-            border-radius: 0.6rem;
-            padding: 1rem;
-            text-align: center;
+            text-align: left;
         }
-        .att-check-result-label {
-            font-size: 0.8rem;
+        .att-term-group {
+            margin-bottom: 1rem;
+        }
+        .att-term-group:last-child {
+            margin-bottom: 0;
+        }
+        .att-term-heading {
+            font-size: 0.85rem;
+            font-weight: 700;
+            color: #3949ab;
+            margin-bottom: 0.5rem;
+            padding-bottom: 0.35rem;
+            border-bottom: 1px solid #e5e7eb;
+        }
+        .att-subject-list {
+            display: flex;
+            flex-direction: column;
+            gap: 0.4rem;
+        }
+        .att-subject-row {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 0.75rem;
+            border-radius: 0.5rem;
+            padding: 0.55rem 0.85rem;
+        }
+        .att-subject-name {
+            font-size: 0.9rem;
             font-weight: 600;
-            opacity: 0.8;
-            margin-bottom: 0.15rem;
         }
-        .att-check-result-value {
-            font-size: 2.2rem;
+        .att-subject-pct {
+            font-size: 1rem;
             font-weight: 800;
-            line-height: 1.1;
+            white-space: nowrap;
         }
         .att-pct-good {
             background: #ecfdf5;
@@ -527,11 +567,22 @@ $conn->close();
                         </div>
                     </form>
 
-                    <?php if ($att_check_pct !== null): ?>
-                        <?php $att_pct_class = $att_check_pct >= 75 ? 'att-pct-good' : ($att_check_pct >= 60 ? 'att-pct-warn' : 'att-pct-low'); ?>
-                        <div class="att-check-result <?php echo $att_pct_class; ?>">
-                            <div class="att-check-result-label">Attendance of <?php echo htmlspecialchars($att_check_enrollment); ?></div>
-                            <div class="att-check-result-value"><?php echo number_format($att_check_pct, 2); ?>%</div>
+                    <?php if (!empty($att_check_terms)): ?>
+                        <div class="att-check-result-wrap">
+                            <?php foreach ($att_check_terms as $termGroup): ?>
+                                <div class="att-term-group">
+                                    <div class="att-term-heading">Term <?php echo htmlspecialchars($termGroup['term']); ?> &middot; Sem <?php echo htmlspecialchars($termGroup['sem']); ?></div>
+                                    <div class="att-subject-list">
+                                        <?php foreach ($termGroup['subjects'] as $subjectRow): ?>
+                                            <?php $subPctClass = $subjectRow['percentage'] >= 75 ? 'att-pct-good' : ($subjectRow['percentage'] >= 60 ? 'att-pct-warn' : 'att-pct-low'); ?>
+                                            <div class="att-subject-row <?php echo $subPctClass; ?>">
+                                                <span class="att-subject-name"><?php echo htmlspecialchars($subjectRow['subject']); ?></span>
+                                                <span class="att-subject-pct"><?php echo number_format($subjectRow['percentage'], 2); ?>%</span>
+                                            </div>
+                                        <?php endforeach; ?>
+                                    </div>
+                                </div>
+                            <?php endforeach; ?>
                         </div>
                     <?php elseif ($att_check_error !== ''): ?>
                         <div class="alert alert-warning mt-3 mb-0" style="border-radius:0.5rem;font-size:0.875rem;">
