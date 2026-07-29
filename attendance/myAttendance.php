@@ -116,6 +116,18 @@ if ($filter_term === '') {
     exit();
 }
 
+// ── Current week bounds (Mon..Sun) ───────────────────────────────────────────
+// Slots are expanded up to the END of the current week (not just today) so the
+// "This Week" view can show upcoming slots. Slots after today carry
+// 'future' => true and are excluded from every other view and from stats,
+// preserving the original behavior outside the week view.
+$today_str = date('Y-m-d');
+$week_start_dt = new DateTime('monday this week');
+$week_end_dt = (clone $week_start_dt)->modify('+6 days');
+$week_start_str = $week_start_dt->format('Y-m-d');
+$week_end_str = $week_end_dt->format('Y-m-d');
+$expand_cap = new DateTime($today_str > $week_end_str ? $today_str : $week_end_str);
+
 // ── Load exceptions for this faculty's mappings ───────────────────────────────
 $exceptions_set = []; // "type:mapping_id|date" => true
 if (!empty($mappings_rows)) {
@@ -147,9 +159,8 @@ if ($filter_term !== '') {
         $repeat_days = array_map('intval', explode(',', (string)$m['repeat_days']));
         $cur = new DateTime((string)$m['start_date']);
         $end = new DateTime((string)$m['end_date']);
-        $today = new DateTime('today');
-        if ($end > $today) {
-            $end = $today;
+        if ($end > $expand_cap) {
+            $end = clone $expand_cap;
         }
         if ($cur > $end) {
             continue;
@@ -178,6 +189,7 @@ if ($filter_term !== '') {
         if (in_array($dow, $repeat_days, true)) {
             $date_str = $cur->format('Y-m-d');
             $dow_str = (string)$dow;
+            $is_future_date = $date_str > $today_str;
             // Resolve per-day slot from JSON if stored
             if ($parsed_slots !== null) {
                 $slot_value = (string)($parsed_slots[$dow] ?? $parsed_slots[$dow_str] ?? '');
@@ -206,6 +218,7 @@ if ($filter_term !== '') {
                         'slot'         => $slot_value,
                         'lab_no'       => $lab_label,
                         'skipped'      => isset($exceptions_set[$mapping_type . ':' . (int)$m['id'] . '|' . $date_str]),
+                        'future'       => $is_future_date,
                     ];
                 }
             } elseif ($mapping_type === 'tutorial' && $parsed_batches !== null && is_array($parsed_batches[$dow] ?? null)) {
@@ -225,6 +238,7 @@ if ($filter_term !== '') {
                         'slot'         => $slot_value,
                         'lab_no'       => '',
                         'skipped'      => isset($exceptions_set[$mapping_type . ':' . (int)$m['id'] . '|' . $date_str]),
+                        'future'       => $is_future_date,
                     ];
                 }
             } else {
@@ -240,6 +254,7 @@ if ($filter_term !== '') {
                     'slot'         => $slot_value,
                     'lab_no'       => '',
                     'skipped'      => isset($exceptions_set[$mapping_type . ':' . (int)$m['id'] . '|' . $date_str]),
+                    'future'       => $is_future_date,
                 ];
             }
         }
@@ -453,7 +468,7 @@ if (isset($_GET['diag']) && $_GET['diag'] === '1') {
     $diag_filled_keys = array_keys($filled_lookup);
 }
 
-$bulk_candidates = array_values(array_filter($slot_list, fn($s) => !$s['filled'] && !$s['skipped']));
+$bulk_candidates = array_values(array_filter($slot_list, fn($s) => !$s['filled'] && !$s['skipped'] && empty($s['future'])));
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['autofill_pending_max'])) {
     $redirect_params = [
@@ -900,18 +915,49 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['restore_slot'])) {
 }
 
 // ── Apply status filter ───────────────────────────────────────────────────────
-// Stats computed before filter (on all slots including skipped)
-$stats_slot_list = $slot_list;
+// Stats computed before filter, on non-future slots only, so counts match the
+// classic views. The week view is the only view that includes future slots.
+$stats_slot_list = array_values(array_filter($slot_list, fn($s) => empty($s['future'])));
 $total_skipped = count(array_filter($stats_slot_list, fn($s) => $s['skipped']));
 
-if ($filter_status === 'filled') {
-    $slot_list = array_values(array_filter($slot_list, fn($s) => $s['filled']));
-} elseif ($filter_status === 'unfilled') {
-    $slot_list = array_values(array_filter($slot_list, fn($s) => !$s['filled'] && !$s['skipped']));
-} elseif ($filter_status === 'skipped') {
-    $slot_list = array_values(array_filter($slot_list, fn($s) => $s['skipped']));
+// Current-week slots (all statuses, incl. upcoming days)
+$week_slot_count = count(array_filter($slot_list, fn($s) => $s['date'] >= $week_start_str && $s['date'] <= $week_end_str));
+
+// Sort key for chronological ordering within a day: first time in the slot
+// string, mapped to minutes; hours below 7 are treated as PM (college slots
+// run 10:30 AM - 5:10 PM, so "1:00 - 2:00" means 13:00).
+if (!function_exists('myatt_slot_minutes')) {
+    function myatt_slot_minutes(string $slot): int {
+        if (!preg_match('/(\d{1,2}):(\d{2})/', $slot, $m)) return 9999;
+        $h = (int)$m[1];
+        if ($h < 7) $h += 12;
+        return $h * 60 + (int)$m[2];
+    }
 }
-// 'all' shows everything including skipped
+
+if ($filter_status === 'filled') {
+    $slot_list = array_values(array_filter($slot_list, fn($s) => $s['filled'] && empty($s['future'])));
+} elseif ($filter_status === 'unfilled') {
+    $slot_list = array_values(array_filter($slot_list, fn($s) => !$s['filled'] && !$s['skipped'] && empty($s['future'])));
+} elseif ($filter_status === 'skipped') {
+    $slot_list = array_values(array_filter($slot_list, fn($s) => $s['skipped'] && empty($s['future'])));
+} elseif ($filter_status === 'week') {
+    $slot_list = array_values(array_filter($slot_list, fn($s) => $s['date'] >= $week_start_str && $s['date'] <= $week_end_str));
+    usort($slot_list, fn($a, $b) => strcmp($a['date'], $b['date']) ?: (myatt_slot_minutes($a['slot']) <=> myatt_slot_minutes($b['slot'])));
+} else {
+    // 'all' shows everything including skipped (but not upcoming days)
+    $slot_list = array_values(array_filter($slot_list, fn($s) => empty($s['future'])));
+}
+
+// Per-day pending counts for the week view day dividers
+$week_day_pending = [];
+if ($filter_status === 'week') {
+    foreach ($slot_list as $s) {
+        if (!$s['filled'] && !$s['skipped']) {
+            $week_day_pending[$s['date']] = ($week_day_pending[$s['date']] ?? 0) + 1;
+        }
+    }
+}
 
 // ── Faculty name lookup ───────────────────────────────────────────────────────
 $faculty_map = [];
@@ -1033,10 +1079,35 @@ $day_names = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
             <div class="app-card shadow-sm mb-3 attendance-table-card">
                 <div class="attendance-table-toolbar">
                     <div class="attendance-table-toolbar-left">
-                        <div class="attendance-filter-pills" role="group" aria-label="Attendance filters">
+                        <?php
+                        $filter_options = [
+                            'all'      => ['label' => 'All',       'icon' => 'bi-grid',           'count' => $total],
+                            'week'     => ['label' => 'This Week', 'icon' => 'bi-calendar-week',  'count' => $week_slot_count],
+                            'unfilled' => ['label' => 'Pending',   'icon' => 'bi-hourglass-split','count' => $unfilled],
+                            'filled'   => ['label' => 'Filled',    'icon' => 'bi-check-circle',   'count' => $filled],
+                            'skipped'  => ['label' => 'Skipped',   'icon' => 'bi-slash-circle',   'count' => $skipped],
+                        ];
+                        $active_filter = isset($filter_options[$filter_status]) ? $filter_status : 'unfilled';
+                        ?>
+                        <div class="attendance-filter-select-wrap d-md-none" data-filter="<?= htmlspecialchars($active_filter) ?>">
+                            <i class="bi <?= htmlspecialchars($filter_options[$active_filter]['icon']) ?> attendance-filter-select-icon"></i>
+                            <select class="attendance-filter-select" aria-label="Attendance filter" onchange="if (this.value) window.location.href = this.value;">
+                                <?php foreach ($filter_options as $status_key => $opt): ?>
+                                    <option value="?<?= htmlspecialchars(http_build_query(['term' => $filter_term, 'status' => $status_key, 'mapping' => $filter_mapping])) ?>" <?= $status_key === $active_filter ? 'selected' : '' ?>>
+                                        <?= htmlspecialchars($opt['label']) ?> (<?= (int)$opt['count'] ?>)
+                                    </option>
+                                <?php endforeach; ?>
+                            </select>
+                            <i class="bi bi-chevron-down attendance-filter-select-chevron"></i>
+                        </div>
+                        <div class="attendance-filter-pills d-none d-md-inline-flex" role="group" aria-label="Attendance filters">
                             <a href="?<?= htmlspecialchars(http_build_query(['term' => $filter_term, 'status' => 'all', 'mapping' => $filter_mapping])) ?>"
                                class="filter-pill <?= $filter_status === 'all' ? 'filter-pill-active' : '' ?>" title="All slots">
                                 All <span class="filter-pill-count"><?= $total ?></span>
+                            </a>
+                            <a href="?<?= htmlspecialchars(http_build_query(['term' => $filter_term, 'status' => 'week', 'mapping' => $filter_mapping])) ?>"
+                               class="filter-pill filter-pill-week <?= $filter_status === 'week' ? 'filter-pill-active' : '' ?>" title="All slots in the current week (<?= htmlspecialchars(date('d M', strtotime($week_start_str))) ?> - <?= htmlspecialchars(date('d M', strtotime($week_end_str))) ?>)">
+                                <i class="bi bi-calendar-week"></i>This Week <span class="filter-pill-count"><?= $week_slot_count ?></span>
                             </a>
                             <a href="?<?= htmlspecialchars(http_build_query(['term' => $filter_term, 'status' => 'unfilled', 'mapping' => $filter_mapping])) ?>"
                                class="filter-pill filter-pill-danger <?= $filter_status === 'unfilled' ? 'filter-pill-active' : '' ?>" title="Pending slots">
@@ -1087,10 +1158,27 @@ $day_names = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
                                     </tr>
                                 </thead>
                                 <tbody>
+                                <?php $prev_week_date = null; ?>
                                 <?php foreach ($slot_list as $i => $slot):
                                     $date_obj = new DateTime($slot['date']);
                                     $dow_name = $day_names[(int)$date_obj->format('w')];
                                     $is_today = ($slot['date'] === date('Y-m-d'));
+                                    if ($filter_status === 'week' && $slot['date'] !== $prev_week_date):
+                                        $prev_week_date = $slot['date'];
+                                        $day_pending_count = $week_day_pending[$slot['date']] ?? 0;
+                                ?>
+                                <tr class="week-day-divider">
+                                    <td colspan="9">
+                                        <span class="week-day-divider-name"><i class="bi bi-calendar-event me-2"></i><?= htmlspecialchars($date_obj->format('l')) ?></span>
+                                        <span class="week-day-divider-date"><?= htmlspecialchars($date_obj->format('d M Y')) ?></span>
+                                        <?php if ($is_today): ?><span class="today-tag">Today</span><?php endif; ?>
+                                        <span class="week-day-divider-count <?= $day_pending_count > 0 ? 'has-pending' : '' ?>">
+                                            <?= $day_pending_count > 0 ? $day_pending_count . ' pending' : 'All done' ?>
+                                        </span>
+                                    </td>
+                                </tr>
+                                <?php endif; ?>
+                                <?php
                                     $mapping_type = $slot['mapping_type'];
                                     // Build params per type
                                     if ($mapping_type === 'lecture') {
@@ -1641,6 +1729,134 @@ $day_names = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 .filter-pill-muted.filter-pill-active {
     background: linear-gradient(135deg, #64748b 0%, #475569 100%) !important;
     box-shadow: 0 4px 10px rgba(100, 116, 139, 0.3);
+}
+
+.filter-pill-week.filter-pill-active {
+    background: linear-gradient(135deg, #0ea5e9 0%, #0284c7 100%) !important;
+    box-shadow: 0 4px 10px rgba(14, 165, 233, 0.3);
+}
+
+/* ---------- Week view day dividers ---------- */
+.week-day-divider td {
+    background: linear-gradient(180deg, #eef2ff 0%, #e0e7ff 100%) !important;
+    border-top: 2px solid #c7d2fe !important;
+    padding: 0.55rem 1rem !important;
+    font-size: 0.85rem;
+}
+
+.week-day-divider-name {
+    font-weight: 800;
+    color: #3730a3;
+    letter-spacing: 0.01em;
+}
+
+.week-day-divider-date {
+    color: #6366f1;
+    font-weight: 600;
+    margin-left: 0.6rem;
+}
+
+.week-day-divider .today-tag {
+    margin-left: 0.6rem;
+}
+
+.week-day-divider-count {
+    float: right;
+    font-weight: 700;
+    font-size: 0.75rem;
+    padding: 0.2rem 0.6rem;
+    border-radius: 999px;
+    background: #d1fae5;
+    color: #047857;
+}
+
+.week-day-divider-count.has-pending {
+    background: #fee2e2;
+    color: #b91c1c;
+}
+
+/* ---------- Mobile filter dropdown (replaces pills on small screens) ---------- */
+.attendance-filter-select-wrap {
+    position: relative;
+    width: 100%;
+}
+
+.attendance-filter-select {
+    -webkit-appearance: none;
+    -moz-appearance: none;
+    appearance: none;
+    width: 100%;
+    padding: 0.7rem 2.6rem 0.7rem 2.7rem;
+    font-size: 0.9rem;
+    font-weight: 700;
+    color: #1e293b;
+    background: linear-gradient(180deg, #ffffff 0%, #f8fafc 100%);
+    border: 1.5px solid #e2e8f0;
+    border-radius: 0.7rem;
+    box-shadow: 0 1px 3px rgba(15, 23, 42, 0.06);
+    cursor: pointer;
+    transition: border-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+.attendance-filter-select:focus {
+    outline: none;
+    border-color: #5c6bc0;
+    box-shadow: 0 0 0 3px rgba(92, 107, 192, 0.18);
+}
+
+.attendance-filter-select-icon,
+.attendance-filter-select-chevron {
+    position: absolute;
+    top: 50%;
+    transform: translateY(-50%);
+    pointer-events: none;
+    font-size: 1rem;
+}
+
+.attendance-filter-select-icon {
+    left: 0.95rem;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 26px;
+    height: 26px;
+    border-radius: 0.45rem;
+    font-size: 0.85rem;
+    background: #eef2ff;
+    color: #4338ca;
+}
+
+.attendance-filter-select-chevron {
+    right: 0.95rem;
+    color: #94a3b8;
+    font-size: 0.85rem;
+}
+
+/* Accent the leading icon by active filter */
+.attendance-filter-select-wrap[data-filter="week"] .attendance-filter-select-icon { background: #e0f2fe; color: #0284c7; }
+.attendance-filter-select-wrap[data-filter="unfilled"] .attendance-filter-select-icon { background: #fee2e2; color: #dc2626; }
+.attendance-filter-select-wrap[data-filter="filled"] .attendance-filter-select-icon { background: #d1fae5; color: #059669; }
+.attendance-filter-select-wrap[data-filter="skipped"] .attendance-filter-select-icon { background: #e2e8f0; color: #475569; }
+
+@media (max-width: 767.98px) {
+    .attendance-table-toolbar {
+        flex-direction: column;
+        align-items: stretch;
+    }
+
+    .attendance-table-toolbar-left {
+        width: 100%;
+    }
+
+    .attendance-table-toolbar-right {
+        width: 100%;
+    }
+
+    .attendance-table-toolbar-right .attendance-bulk-form,
+    .attendance-table-toolbar-right .bulk-autofill-btn {
+        width: 100%;
+        justify-content: center;
+    }
 }
 
 /* Bulk autofill button */
@@ -2401,6 +2617,13 @@ document.addEventListener('DOMContentLoaded', function () {
             window.location.href = row.dataset.takeUrl;
         }
     });
+
+    // Week view renders chronological rows grouped by day-divider rows;
+    // DataTables would re-sort and paginate them, breaking the grouping.
+    const isWeekView = <?= $filter_status === 'week' ? 'true' : 'false' ?>;
+    if (isWeekView) {
+        return;
+    }
 
     if (typeof window.jQuery === 'undefined' || typeof jQuery.fn.DataTable === 'undefined') {
         return;
