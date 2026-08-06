@@ -81,6 +81,10 @@ $header_enrollment_search = htmlspecialchars(trim((string)($_GET['enrollment'] ?
                                     <i class="bi bi-key me-2"></i>
                                     <span>Change Password</span>
                                 </a>
+                                <a class="dropdown-item user-profile-action <?= $current_page === 'masterPassword.php' ? 'active' : '' ?>" href="masterPassword.php">
+                                    <i class="bi bi-shield-lock me-2"></i>
+                                    <span>Student Report Password</span>
+                                </a>
                                 <a class="dropdown-item user-profile-action" href="logout.php">
                                     <i class="bi bi-box-arrow-right me-2"></i>
                                     <span>Log Out</span>

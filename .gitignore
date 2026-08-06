@@ -6,6 +6,9 @@
 attendance/dbconfig.local.php
 **/Admin/dbconfig.local.php
 
+# Student Corner master-password override (see attendance/studentreport.config.php)
+attendance/studentreport.local.php
+
 # Real config files should NOT be modified after initial commit —
 # rotate secrets on the server instead. Existing files are kept for
 # legacy local-dev setups only. Use environment variables instead.
