@@ -1,11 +1,15 @@
 <?php
 include 'dbconfig.php'; // Include database connection
+require_once __DIR__ . '/studentreport.config.php';
 
 // optional message from add/update/delete redirects
 $msg = '';
 if (isset($_GET['msg'])) {
     $msg = htmlspecialchars($_GET['msg']);
 }
+
+$bulk_error = '';
+$bulk_success = '';
 
 // Add Student (Form handling)
 if (isset($_POST['add_student'])) {
@@ -110,6 +114,58 @@ if ($filter_status === '1' || $filter_status === '0') {
 
 $where_sql = empty($where) ? '' : ' WHERE ' . implode(' AND ', $where);
 
+// Whether any filter narrows the set. Computed here (before the delete handler)
+// because the delete guard depends on it; re-used for the UI further down.
+$has_active_filter_precheck = !empty($where);
+
+// ─── Bulk delete (filtered) ───────────────────────────────────────────────────
+// Deletes exactly the set the current filters describe — the same $where_sql
+// that drives the table below, so what is listed is what is removed.
+//
+// Guards, in order:
+//   1. At least one filter must be active. Deleting the entire students table
+//      by submitting an unfiltered form is never allowed.
+//   2. The master password (the same one that unlocks the student detailed
+//      report) must be supplied and correct.
+//   3. The filter signature posted with the form must match the filters that
+//      are active now, so a stale form cannot delete a different set than the
+//      one the user was looking at when they clicked.
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['bulk_delete_students'])) {
+    $posted_signature = (string)($_POST['filter_signature'] ?? '');
+    $current_signature = implode('|', [
+        $search, $filter_term, $filter_sem, $filter_class,
+        $filter_lab, $filter_tut, $filter_status,
+    ]);
+    $bulk_password = (string)($_POST['bulk_master_password'] ?? '');
+
+    if (!$has_active_filter_precheck) {
+        $bulk_error = 'Select at least one filter before deleting. Deleting all students at once is not allowed.';
+    } elseif ($posted_signature !== $current_signature) {
+        $bulk_error = 'The filters changed since this form was loaded. Please review the list and try again.';
+    } elseif ($bulk_password === '') {
+        $bulk_error = 'Enter the master password to confirm deletion.';
+    } elseif (!attendance_master_password_verify($bulk_password)) {
+        $bulk_error = 'Incorrect master password. No students were deleted.';
+    } else {
+        $del_sql = "DELETE FROM students" . $where_sql;
+        $del_stmt = $conn->prepare($del_sql);
+        if ($del_stmt) {
+            if (!empty($params)) {
+                $del_stmt->bind_param($types, ...$params);
+            }
+            if ($del_stmt->execute()) {
+                $deleted_count = $del_stmt->affected_rows;
+                $bulk_success = $deleted_count . ' student record(s) deleted.';
+            } else {
+                $bulk_error = 'Could not delete the selected students. Please try again.';
+            }
+            $del_stmt->close();
+        } else {
+            $bulk_error = 'Could not prepare the delete request. Please try again.';
+        }
+    }
+}
+
 $sql = "SELECT * FROM students" . $where_sql . " ORDER BY id ASC";
 $stmt = $conn->prepare($sql);
 if (!empty($params)) {
@@ -127,6 +183,18 @@ if ($cnt && $crow = $cnt->fetch_assoc()) { $total_all = (int)$crow['c']; }
 $has_active_filter = $search !== '' || $filter_term !== '' || $filter_sem !== ''
                   || $filter_class !== '' || $filter_lab !== '' || $filter_tut !== ''
                   || $filter_status !== '';
+
+// Human-readable list of the filters in force, so the bulk-delete confirmation
+// spells out exactly which set is about to be removed.
+$active_filter_labels = [];
+if ($search !== '')        { $active_filter_labels[] = 'Search "' . $search . '"'; }
+if ($filter_term !== '')   { $active_filter_labels[] = 'Term ' . $filter_term; }
+if ($filter_sem !== '')    { $active_filter_labels[] = 'Sem ' . $filter_sem; }
+if ($filter_class !== '')  { $active_filter_labels[] = 'Class ' . $filter_class; }
+if ($filter_lab !== '')    { $active_filter_labels[] = 'Lab ' . $filter_lab; }
+if ($filter_tut !== '')    { $active_filter_labels[] = 'Tut ' . $filter_tut; }
+if ($filter_status === '1') { $active_filter_labels[] = 'Active only'; }
+if ($filter_status === '0') { $active_filter_labels[] = 'Disabled only'; }
 
 // Count of active filters (for badge on Clear Filters button)
 $active_filter_count = 0;
@@ -293,6 +361,61 @@ if ($filter_status !== '') { $active_filter_count++; }
                             </div>
                         </form>
 
+                        <?php if ($bulk_success !== ''): ?>
+                            <div class="alert alert-success alert-dismissible fade show" role="alert">
+                                <i class="bi bi-check2-circle me-1"></i><?= htmlspecialchars($bulk_success); ?>
+                                <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+                            </div>
+                        <?php endif; ?>
+                        <?php if ($bulk_error !== ''): ?>
+                            <div class="alert alert-danger alert-dismissible fade show" role="alert">
+                                <i class="bi bi-exclamation-triangle me-1"></i><?= htmlspecialchars($bulk_error); ?>
+                                <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+                            </div>
+                        <?php endif; ?>
+
+                        <?php if ($has_active_filter && $total_filtered > 0): ?>
+                            <!-- Bulk delete: removes exactly the filtered set shown below. -->
+                            <div class="bulk-delete-bar mb-3">
+                                <div class="bulk-delete-summary">
+                                    <i class="bi bi-exclamation-octagon-fill me-1"></i>
+                                    <span>
+                                        <strong><?= (int)$total_filtered; ?></strong>
+                                        student<?= $total_filtered === 1 ? '' : 's'; ?> match the current filter
+                                        <?php if (!empty($active_filter_labels)): ?>
+                                            (<?= htmlspecialchars(implode(', ', $active_filter_labels)); ?>)
+                                        <?php endif; ?>.
+                                    </span>
+                                </div>
+                                <button type="button" class="btn btn-danger btn-sm bulk-delete-toggle" id="bulkDeleteToggle">
+                                    <i class="bi bi-trash3 me-1"></i>Delete These <?= (int)$total_filtered; ?>
+                                </button>
+
+                                <div class="bulk-delete-confirm d-none" id="bulkDeleteConfirm">
+                                    <form method="POST" action="managestudents.php?<?= htmlspecialchars(http_build_query($_GET)); ?>" autocomplete="off"
+                                          onsubmit="return confirm('Permanently delete <?= (int)$total_filtered; ?> student record(s)? This cannot be undone.');">
+                                        <input type="hidden" name="filter_signature" value="<?= htmlspecialchars(implode('|', [$search, $filter_term, $filter_sem, $filter_class, $filter_lab, $filter_tut, $filter_status])); ?>">
+                                        <p class="bulk-delete-warning mb-2">
+                                            This permanently deletes <strong><?= (int)$total_filtered; ?></strong> student
+                                            record<?= $total_filtered === 1 ? '' : 's'; ?>. Attendance already recorded is
+                                            stored against enrollment numbers and is <strong>not</strong> removed, but those
+                                            students will no longer appear in registers or reports.
+                                        </p>
+                                        <label class="form-label small fw-semibold mb-1" for="bulk_master_password">Master Password</label>
+                                        <div class="bulk-delete-actions">
+                                            <input type="password" id="bulk_master_password" name="bulk_master_password"
+                                                   class="form-control form-control-sm" placeholder="Enter master password"
+                                                   autocomplete="new-password" required>
+                                            <button type="submit" name="bulk_delete_students" value="1" class="btn btn-danger btn-sm">
+                                                <i class="bi bi-trash3 me-1"></i>Confirm Delete
+                                            </button>
+                                            <button type="button" class="btn btn-outline-secondary btn-sm" id="bulkDeleteCancel">Cancel</button>
+                                        </div>
+                                    </form>
+                                </div>
+                            </div>
+                        <?php endif; ?>
+
                        <!-- Table for Students -->
                         <div class="table-responsive">
                             <table id="studentsTable" class="table table-striped table-bordered display">
@@ -436,6 +559,57 @@ if ($filter_status !== '') { $active_filter_count++; }
         background: #ffffff !important;
         color: #dc3545 !important;
     }
+
+    /* ── Bulk delete bar ─────────────────────────────────────────────────── */
+    .bulk-delete-bar {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: 0.75rem;
+        padding: 0.75rem 0.9rem;
+        border: 1px solid #fecaca;
+        border-left: 4px solid #dc3545;
+        border-radius: 0.5rem;
+        background: #fef2f2;
+    }
+    .bulk-delete-summary {
+        flex: 1 1 260px;
+        font-size: 0.85rem;
+        color: #7f1d1d;
+        line-height: 1.4;
+    }
+    .bulk-delete-toggle {
+        white-space: nowrap;
+    }
+    .bulk-delete-confirm {
+        flex: 1 1 100%;
+        border-top: 1px solid #fecaca;
+        padding-top: 0.75rem;
+        margin-top: 0.15rem;
+    }
+    .bulk-delete-warning {
+        font-size: 0.8rem;
+        color: #7f1d1d;
+        line-height: 1.45;
+    }
+    .bulk-delete-actions {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: 0.5rem;
+    }
+    .bulk-delete-actions .form-control {
+        max-width: 240px;
+    }
+    @media (max-width: 575.98px) {
+        .bulk-delete-toggle,
+        .bulk-delete-actions .btn {
+            width: 100%;
+        }
+        .bulk-delete-actions .form-control {
+            max-width: none;
+        }
+    }
 </style>
 <script>
     $(document).ready(function () {
@@ -454,6 +628,18 @@ if ($filter_status !== '') { $active_filter_count++; }
         // which requires manual submission so it doesn't fire on every keystroke).
         $('#studentsFilterForm select').on('change', function () {
             $('#studentsFilterForm').trigger('submit');
+        });
+
+        // Bulk delete: reveal the master-password confirmation step.
+        $('#bulkDeleteToggle').on('click', function () {
+            $('#bulkDeleteConfirm').removeClass('d-none');
+            $(this).addClass('d-none');
+            $('#bulk_master_password').trigger('focus');
+        });
+        $('#bulkDeleteCancel').on('click', function () {
+            $('#bulkDeleteConfirm').addClass('d-none');
+            $('#bulkDeleteToggle').removeClass('d-none');
+            $('#bulk_master_password').val('');
         });
     });
 </script>
