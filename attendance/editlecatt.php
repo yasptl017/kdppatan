@@ -158,6 +158,14 @@ $escaped_sem   = $conn->real_escape_string($record['sem']);
 $escaped_class = $conn->real_escape_string($record['class']);
 $students_result = $conn->query("SELECT id, enrollmentNo, name, class FROM students WHERE term = '{$escaped_term}' AND sem = '{$escaped_sem}' AND class = '{$escaped_class}' ORDER BY enrollmentNo, name");
 $total_students = $students_result->num_rows;
+
+// This page only ever edits an already-filled record, so send the user back to
+// the filled view of My Attendance for the same term.
+$my_attendance_url = 'myAttendance.php?' . http_build_query([
+    'term'    => $record['term'],
+    'status'  => 'filled',
+    'mapping' => 0,
+]);
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -170,9 +178,14 @@ $total_students = $students_result->num_rows;
         <div class="container-xl">
             <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-3">
                 <h1 class="app-page-title mb-0"><i class="bi bi-pencil-square me-2"></i>Edit Lecture Attendance</h1>
-                <a href="editAttendance.php?type=lecture" class="btn btn-outline-secondary btn-sm">
-                    <i class="bi bi-arrow-left me-1"></i>Back to List
-                </a>
+                <div class="d-flex gap-2">
+                    <a href="editAttendance.php?type=lecture" class="btn btn-outline-secondary btn-sm">
+                        <i class="bi bi-arrow-left me-1"></i>Back to List
+                    </a>
+                    <a href="<?= htmlspecialchars($my_attendance_url); ?>" class="btn btn-success">
+                        <i class="bi bi-calendar-check me-1"></i>My Attendance
+                    </a>
+                </div>
             </div>
 
             <?php if ($success_msg !== ''): ?>
