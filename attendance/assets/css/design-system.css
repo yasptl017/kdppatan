@@ -872,3 +872,47 @@ input[type="file"].form-control::file-selector-button:hover {
         padding: 0.35rem 0.65rem !important;
     }
 }
+
+/* ── Mobile horizontal gutters ───────────────────────────────────────────────
+   The page shell nests .app-content > .container-xl > .app-card >
+   .app-card-body, and each layer contributed its own left/right padding. On a
+   ~390px phone that stacked up to roughly 69px per side, leaving content only
+   about 72% of the screen width. Below 768px, collapse the inner layers and
+   keep a single small gutter on .app-content so content gets nearly the full
+   width. Vertical padding is deliberately left alone.
+   The !important flags are required to beat `.app-card-body { padding: ...
+   !important }` earlier in this file, which otherwise overrides even
+   Bootstrap's .p-0 helper.                                                  */
+@media (max-width: 767.98px) {
+    .app-content {
+        padding-left: 0.5rem !important;
+        padding-right: 0.5rem !important;
+    }
+    .app-content > .container-xl,
+    .app-content > .container-fluid {
+        padding-left: 0 !important;
+        padding-right: 0 !important;
+    }
+    /* Bootstrap .row carries negative side margins that normally cancel out the
+       container's padding. With that padding removed the row would bleed past
+       the viewport, so neutralise the negative margins and let the columns
+       supply the gutter instead. */
+    .app-content > .container-xl > .row,
+    .app-content > .container-fluid > .row {
+        margin-left: 0;
+        margin-right: 0;
+    }
+    .app-content .app-card {
+        padding-left: 0 !important;
+        padding-right: 0 !important;
+    }
+    .app-content .app-card > .app-card-body:not(.p-0) {
+        padding-left: 0.6rem !important;
+        padding-right: 0.6rem !important;
+    }
+    /* Cards that opt out with .p-0 stay completely flush. */
+    .app-content .app-card > .app-card-body.p-0 {
+        padding-left: 0 !important;
+        padding-right: 0 !important;
+    }
+}

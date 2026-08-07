@@ -2605,10 +2605,21 @@ $day_names = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
    field labels; `order` puts them in reading order regardless of column
    position.                                                              */
 @media (max-width: 767.98px) {
+    /* The shell's horizontal gutters are trimmed globally in design-system.css
+       so cards get nearly the full screen width. */
     .attendance-table-wrap {
         overflow-x: visible;
-        padding: 0.75rem;
+        padding: 0.5rem 0.15rem;
         background: #f1f5f9;
+    }
+    /* The card body is flush, so the DataTables length/search controls need
+       their own small gutter to avoid sitting against the screen edge. */
+    .attendance-table-wrap .dataTables_length,
+    .attendance-table-wrap .dataTables_filter,
+    .attendance-table-wrap .dataTables_info,
+    .attendance-table-wrap .dataTables_paginate {
+        padding-left: 0.4rem;
+        padding-right: 0.4rem;
     }
     .attendance-data-table,
     .attendance-data-table tbody {
