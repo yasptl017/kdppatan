@@ -2276,7 +2276,7 @@ $day_names = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 
 /* ---------- DataTables Overrides ---------- */
 .attendance-table-wrap .dataTables_wrapper {
-    padding: 1rem 1.25rem !important;
+    padding: 0rem !important;
 }
 
 .attendance-table-wrap .dataTables_filter {
@@ -2587,14 +2587,216 @@ $day_names = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 }
 
 @media (max-width: 575.98px) {
-    .attendance-data-table {
-        min-width: 720px;
-    }
     .attendance-table-wrap .dataTables_length,
     .attendance-table-wrap .dataTables_filter {
         text-align: left;
         float: none;
         width: 100%;
+    }
+}
+
+/* ── Mobile card layout ──────────────────────────────────────────────────────
+   Below 768px each table row becomes a compact card so nothing needs
+   horizontal scrolling. The table markup is deliberately left untouched —
+   DataTables still owns search/sort/pagination, and it keeps working because
+   the same <tr>/<td> elements are simply re-styled: the row becomes a flex
+   container and the cells flow inline, so date/day/class/slot/status share a
+   wrapped line rather than each claiming its own. Values are shown without
+   field labels; `order` puts them in reading order regardless of column
+   position.                                                              */
+@media (max-width: 767.98px) {
+    .attendance-table-wrap {
+        overflow-x: visible;
+        padding: 0.75rem;
+        background: #f1f5f9;
+    }
+    .attendance-data-table,
+    .attendance-data-table tbody {
+        display: block;
+        width: auto;
+    }
+    /* Header row is meaningless once cells stack — values are self-explanatory
+       in the card. Hidden with display:none rather than a clip-based
+       visually-hidden helper, because the <th> cells keep their desktop widths
+       in layout flow and would push the page wider than the viewport. Sorting
+       stays reachable through the DataTables controls above the list. */
+    .attendance-data-table thead {
+        display: none;
+    }
+    .attendance-data-table {
+        min-width: 0;
+        background: transparent;
+    }
+    /* Each card is a flex row so the small meta cells (date, day, class, slot,
+       status) sit side by side and wrap, instead of each taking its own line. */
+    .attendance-data-table tbody tr {
+        position: relative;
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: 0.3rem 0.5rem;
+        background: #fff;
+        border: 1px solid #e2e8f0;
+        border-left: 4px solid #cbd5e1;
+        border-radius: 0.6rem;
+        margin-bottom: 0.5rem;
+        padding: 0.55rem 0.65rem;
+        box-shadow: 0 1px 2px rgba(15, 23, 42, 0.05);
+    }
+    .attendance-data-table tbody tr:last-child {
+        margin-bottom: 0;
+    }
+    /* Status is conveyed by the left edge colour of each card. */
+    .attendance-data-table tbody tr.row-pending { border-left-color: #f59e0b; }
+    .attendance-data-table tbody tr.row-today   { border-left-color: #3949ab; }
+    .attendance-data-table tbody tr.row-skipped { border-left-color: #94a3b8; opacity: 0.85; }
+
+    /* Bootstrap styles cells via `.table > :not(caption) > * > *`, which beats a
+       plain `td` selector — hence the !important on padding/border here. */
+    .attendance-data-table tbody tr td {
+        display: block;
+        width: auto;
+        border: 0 !important;
+        padding: 0 !important;
+        text-align: left !important;
+        box-shadow: none !important;
+        background: transparent !important;
+    }
+
+    /* Row number sits as a faint badge in the top-right corner. */
+    .attendance-data-table tbody tr td.col-num {
+        position: absolute;
+        top: 0.4rem;
+        right: 0.55rem;
+        width: auto;
+    }
+    .attendance-data-table tbody tr td.col-num .row-num {
+        font-size: 0.65rem;
+        color: #cbd5e1;
+        font-weight: 700;
+    }
+
+    /* Line 1: type pill + status pill (status pushed right, clear of the
+       row-number badge). Line 2: subject. Line 3: the remaining meta values. */
+    .attendance-data-table tbody tr td.col-type {
+        order: 1;
+        flex: 0 0 auto;
+    }
+    .attendance-data-table tbody tr td.col-subject {
+        order: 3;
+        flex: 1 1 100%;
+        padding-right: 1.5rem !important;
+    }
+    .attendance-data-table tbody tr td.col-subject .subject-cell {
+        flex-direction: row;
+        align-items: baseline;
+        flex-wrap: wrap;
+        gap: 0.35rem;
+    }
+    .attendance-data-table tbody tr td.col-subject .subject-name {
+        font-size: 0.92rem;
+        font-weight: 700;
+        line-height: 1.25;
+        white-space: normal;
+    }
+    .attendance-data-table tbody tr td.col-subject .subject-sem {
+        font-size: 0.7rem;
+    }
+
+    /* Meta cells share one wrapped line, separated by thin dividers. */
+    .attendance-data-table tbody tr td.col-date { order: 4; }
+    .attendance-data-table tbody tr td.col-day  { order: 5; }
+    .attendance-data-table tbody tr td.col-class { order: 6; }
+    .attendance-data-table tbody tr td.col-slot { order: 7; }
+    /* Status rides the top line beside the type pill, pushed right but stopping
+       short of the row-number badge in the corner. */
+    .attendance-data-table tbody tr td.col-status {
+        order: 2;
+        margin-left: auto;
+        margin-right: 1.4rem;
+    }
+    .attendance-data-table tbody tr td.col-status .status-pill {
+        min-width: 0;
+        font-size: 0.62rem;
+        padding: 0.22rem 0.45rem;
+    }
+
+    .attendance-data-table tbody tr td.col-date .date-cell {
+        justify-content: flex-start;
+        gap: 0.3rem;
+    }
+    /* Compact the calendar chip into a single inline date. */
+    .attendance-data-table tbody tr td.col-date .date-cell-day {
+        width: auto;
+        height: auto;
+        background: transparent;
+        color: #334155;
+        font-size: 0.8rem;
+        font-weight: 700;
+        box-shadow: none;
+        border-radius: 0;
+        padding: 0;
+    }
+    .attendance-data-table tbody tr td.col-date .date-cell-month {
+        flex-direction: row;
+        gap: 0.2rem;
+        font-size: 0.75rem;
+        color: #64748b;
+        text-transform: none;
+    }
+    .attendance-data-table tbody tr td.col-date .date-cell-month small {
+        font-size: 0.75rem;
+    }
+
+    /* Action buttons close the card on their own line. */
+    .attendance-data-table tbody tr td.col-action {
+        order: 8;
+        flex: 1 1 100%;
+        margin-top: 0.15rem;
+        padding-top: 0.45rem !important;
+        border-top: 1px solid #f1f5f9 !important;
+    }
+    .attendance-data-table tbody tr td.col-action .action-buttons {
+        justify-content: flex-start;
+        gap: 0.4rem;
+    }
+    .attendance-data-table tbody tr td.col-action .action-btn {
+        width: auto !important;
+        min-width: 44px;
+        height: 34px !important;
+        min-height: 34px !important;
+        flex: 1 1 0;
+        max-width: 130px;
+    }
+    .attendance-data-table tbody tr td.col-action form.d-inline-flex {
+        flex: 1 1 0;
+        max-width: 140px;
+    }
+    .attendance-data-table tbody tr td.col-action form.d-inline-flex .action-btn {
+        width: 100% !important;
+        max-width: none;
+    }
+
+    /* Week-view day dividers span the full width as section headings. */
+    .attendance-data-table tbody tr.week-day-divider {
+        display: block;
+        background: transparent;
+        border: 0;
+        box-shadow: none;
+        padding: 0.4rem 0 0.2rem;
+        margin-bottom: 0.2rem;
+    }
+    .attendance-data-table tbody tr.week-day-divider td {
+        padding: 0 !important;
+        border: 0 !important;
+    }
+
+    /* Keep the tap-anywhere affordance obvious on touch devices. */
+    .attendance-data-table tbody tr.row-clickable {
+        cursor: pointer;
+    }
+    .attendance-data-table tbody tr.row-clickable:active {
+        background: #f8fafc;
     }
 }
 </style>
