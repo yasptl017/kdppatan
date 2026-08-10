@@ -90,6 +90,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['submit_attendance']))
     }
     $class_students_stmt->close();
 
+    // Store the absent list in the same natural order the page displays.
+    usort($class_enrollments, 'strnatcasecmp');
+
     $class_enrollment_set = array_flip($class_enrollments);
     $present_filtered = [];
     foreach ($present_tokens as $enrollment_no) {
@@ -129,7 +132,11 @@ $escaped_term = $conn->real_escape_string($data['term']);
 $escaped_sem = $conn->real_escape_string($data['sem']);
 $escaped_class = $conn->real_escape_string($data['class']);
 $students_result = $conn->query("SELECT id, enrollmentNo, name, class FROM students WHERE term = '{$escaped_term}' AND sem = '{$escaped_sem}' AND class = '{$escaped_class}' ORDER BY enrollmentNo, name");
-$total_students  = $students_result->num_rows;
+// Re-order in PHP so prefixed enrollment numbers (CO-1, CO-2 … CO-10) list in
+// natural order instead of text order. See attendance_sort_students_naturally().
+$students_list   = $students_result ? $students_result->fetch_all(MYSQLI_ASSOC) : [];
+$students_list   = attendance_sort_students_naturally($students_list);
+$total_students  = count($students_list);
 
 // --- Calculate lecture attendance percentage for the selected subject ---
 $subject_att_pct = [];
@@ -140,15 +147,13 @@ $lecture_class_esc   = $conn->real_escape_string($data['class'] ?? '');
 if ($lecture_subject_esc !== '' && $lecture_term_esc !== '' && $lecture_sem_esc !== '' && $lecture_class_esc !== '' && $total_students > 0) {
     $class_enrollments = [];
     $id_to_enrollment = [];
-    $students_result->data_seek(0);
-    while ($s = $students_result->fetch_assoc()) {
+    foreach ($students_list as $s) {
         $enr = trim((string)($s['enrollmentNo'] ?? ''));
         if ($enr !== '') {
             $class_enrollments[] = $enr;
             $id_to_enrollment[(string)$s['id']] = $enr;
         }
     }
-    $students_result->data_seek(0);
 
     $pct_res = $conn->query("SELECT presentNo, absentNo FROM lecattendance WHERE term='{$lecture_term_esc}' AND sem='{$lecture_sem_esc}' AND class='{$lecture_class_esc}' AND subject='{$lecture_subject_esc}'");
     if ($pct_res) {
@@ -173,11 +178,9 @@ if ($lecture_subject_esc !== '' && $lecture_term_esc !== '' && $lecture_sem_esc 
 // --- Autofill: nearest attendance records (same day -> before -> after) ---
 $class_enrollments = [];
 if ($total_students > 0) {
-    $students_result->data_seek(0);
-    while ($s = $students_result->fetch_assoc()) {
+    foreach ($students_list as $s) {
         if (!empty($s['enrollmentNo'])) $class_enrollments[] = $s['enrollmentNo'];
     }
-    $students_result->data_seek(0);
 }
 
 $autofill_records = [];
@@ -431,8 +434,7 @@ usort($autofill_records, function($a, $b) {
                         <?php if ($total_students > 0): ?>
                             <div class="row g-2" id="student-cards">
                                 <?php
-                                $students_result->data_seek(0);
-                                while ($student = $students_result->fetch_assoc()):
+                                foreach ($students_list as $student):
                                     $student_roll = !empty($student['enrollmentNo']) ? $student['enrollmentNo'] : $student['id'];
                                     $display_name = short_name($student['name']);
                                     $pct_val = $subject_att_pct[$student_roll] ?? -1;
@@ -453,7 +455,7 @@ usort($autofill_records, function($a, $b) {
                                             </div>
                                         </label>
                                     </div>
-                                <?php endwhile; ?>
+                                <?php endforeach; ?>
                             </div>
 
                             <div class="mt-3 d-flex align-items-center gap-2 flex-wrap">

@@ -193,4 +193,59 @@ if (!$conn instanceof mysqli) {
         attendance_render_database_error_page($db_connection_error);
     }
 }
+
+if (!function_exists('attendance_sort_students_naturally')) {
+    /**
+     * Order student rows by enrollment number in natural (human) order.
+     *
+     * Plain SQL `ORDER BY enrollmentNo` sorts as text, so prefixed numbers such
+     * as CO-1, CO-2 … CO-10 come out as CO-1, CO-10, CO-11, CO-2 — the digits
+     * are compared character by character. strnatcasecmp() compares embedded
+     * numbers by value instead, giving CO-1, CO-2, CO-3 … CO-10, CO-11.
+     *
+     * Enrollment numbers made up only of digits (e.g. 226310316001) are already
+     * equal-length in practice and keep exactly the same ascending order they
+     * had before, so existing installations see no change.
+     *
+     * Sorting happens in PHP rather than SQL deliberately: the SQL equivalent
+     * needs REGEXP_REPLACE/REGEXP_SUBSTR (MySQL 8.0+ / MariaDB 10.0+), and if
+     * the host lacked them every attendance page would fail. This works on any
+     * version.
+     *
+     * @param array $rows        Rows containing at least the enrollment key.
+     * @param string $enrollKey  Key holding the enrollment number.
+     * @param string $nameKey    Optional tie-breaker key.
+     * @param string $groupKey   Optional key sorted before the enrollment
+     *                           number (lab/tutorial pages group by batch
+     *                           first, and that grouping must be preserved).
+     */
+    function attendance_sort_students_naturally(array $rows, $enrollKey = 'enrollmentNo', $nameKey = 'name', $groupKey = '')
+    {
+        usort($rows, function ($a, $b) use ($enrollKey, $nameKey, $groupKey) {
+            if ($groupKey !== '') {
+                $ga = strtoupper(trim((string)($a[$groupKey] ?? '')));
+                $gb = strtoupper(trim((string)($b[$groupKey] ?? '')));
+                if ($ga !== $gb) {
+                    return strnatcasecmp($ga, $gb);
+                }
+            }
+            $cmp = strnatcasecmp(
+                (string)($a[$enrollKey] ?? ''),
+                (string)($b[$enrollKey] ?? '')
+            );
+            if ($cmp !== 0) {
+                return $cmp;
+            }
+            if ($nameKey === '') {
+                return 0;
+            }
+            return strnatcasecmp(
+                (string)($a[$nameKey] ?? ''),
+                (string)($b[$nameKey] ?? '')
+            );
+        });
+
+        return $rows;
+    }
+}
 ?>

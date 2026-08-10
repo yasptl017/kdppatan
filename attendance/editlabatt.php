@@ -156,6 +156,10 @@ if (!empty($batches_normalized)) {
 if (!$students_result) {
     $students_result = $conn->query("SELECT id, enrollmentNo, name, labBatch FROM students WHERE 1=0");
 }
+// Natural order so CO-1, CO-2 … CO-10 list correctly within each batch.
+$students_list  = $students_result ? $students_result->fetch_all(MYSQLI_ASSOC) : [];
+$students_list  = attendance_sort_students_naturally($students_list, 'enrollmentNo', 'name', 'labBatch');
+$total_students = count($students_list);
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -227,7 +231,7 @@ if (!$students_result) {
                     <div class="app-card-body">
                         <div class="d-flex flex-wrap align-items-center justify-content-between gap-2 mb-3">
                             <h4 class="mb-0">Update Attendance
-                                <span class="text-muted fw-normal" style="font-size:0.875rem;">(<?= $students_result->num_rows ?> students)</span>
+                                <span class="text-muted fw-normal" style="font-size:0.875rem;">(<?= $total_students ?> students)</span>
                             </h4>
                             <div class="d-flex gap-2">
                                 <button type="button" class="btn btn-sm btn-outline-success" id="markAllBtn">
@@ -239,9 +243,9 @@ if (!$students_result) {
                             </div>
                         </div>
 
-                        <?php if ($students_result->num_rows > 0): ?>
+                        <?php if ($total_students > 0): ?>
                             <div class="row g-2" id="student-cards">
-                                <?php while ($student = $students_result->fetch_assoc()):
+                                <?php foreach ($students_list as $student):
                                     $roll         = !empty($student['enrollmentNo']) ? $student['enrollmentNo'] : $student['id'];
                                     $display_name = short_name($student['name']);
                                     $s_batch      = strtoupper(trim((string)$student['labBatch']));
@@ -260,7 +264,7 @@ if (!$students_result) {
                                             </div>
                                         </label>
                                     </div>
-                                <?php endwhile; ?>
+                                <?php endforeach; ?>
                             </div>
 
                             <!-- PC Used per Lab -->

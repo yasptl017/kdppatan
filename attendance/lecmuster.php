@@ -564,7 +564,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && strtolower(trim((string)($_POST['re
             $stuStmt->bind_param('sss', $term, $sem, $class);
             $stuStmt->execute();
             $stuRes = $stuStmt->get_result();
-            while ($student = $stuRes->fetch_assoc()) {
+            // Natural order so CO-1, CO-2 … CO-10 appear in sequence in the muster.
+            $stuRows = attendance_sort_students_naturally($stuRes->fetch_all(MYSQLI_ASSOC));
+            foreach ($stuRows as $student) {
                 $enrollment = trim((string)$student['enrollmentNo']);
                 if ($enrollment === '') {
                     continue;

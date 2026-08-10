@@ -341,7 +341,11 @@ if (!$students_result) {
     $students_result = $conn->query("SELECT id, enrollmentNo, name, labBatch FROM students WHERE 1 = 0");
 }
 
-$total_students = $students_result ? $students_result->num_rows : 0;
+// Re-order in PHP so prefixed enrollment numbers (CO-1, CO-2 … CO-10) list in
+// natural order within each batch. See attendance_sort_students_naturally().
+$students_list  = $students_result ? $students_result->fetch_all(MYSQLI_ASSOC) : [];
+$students_list  = attendance_sort_students_naturally($students_list, 'enrollmentNo', 'name', 'labBatch');
+$total_students = count($students_list);
 
 // --- Calculate lab attendance percentage for the selected subject ---
 $subject_att_pct = [];
@@ -351,15 +355,13 @@ $lab_sem_esc     = $conn->real_escape_string($data['sem'] ?? '');
 if ($lab_subject_esc !== '' && $lab_term_esc !== '' && $lab_sem_esc !== '' && !empty($selected_batches_normalized) && $total_students > 0) {
     $enr_batch_map = [];
     $id_to_enrollment = [];
-    $students_result->data_seek(0);
-    while ($s = $students_result->fetch_assoc()) {
+    foreach ($students_list as $s) {
         $enr = trim((string)($s['enrollmentNo'] ?? ''));
         if ($enr !== '') {
             $enr_batch_map[$enr] = strtoupper(str_replace(' ', '', (string)$s['labBatch']));
             $id_to_enrollment[(string)$s['id']] = $enr;
         }
     }
-    $students_result->data_seek(0);
 
     $pct_res = $conn->query("SELECT batch, presentNo FROM labattendance WHERE term='{$lab_term_esc}' AND sem='{$lab_sem_esc}' AND subject='{$lab_subject_esc}' AND COALESCE(TRIM(labNo), '') <> ''");
     if ($pct_res) {
@@ -412,12 +414,10 @@ if (!empty($selected_batches_normalized)) {
 // ── Autofill: nearest attendance records (same day → before → after) ───────────
 // Collect enrollment numbers of students in the selected batches
 $batch_enrollments = [];
-if ($students_result && $total_students > 0) {
-    $students_result->data_seek(0);
-    while ($s = $students_result->fetch_assoc()) {
+if ($total_students > 0) {
+    foreach ($students_list as $s) {
         if (!empty($s['enrollmentNo'])) $batch_enrollments[] = $s['enrollmentNo'];
     }
-    $students_result->data_seek(0);
 }
 
 $autofill_records = [];
@@ -687,8 +687,7 @@ if (!empty($batch_enrollments)) {
                         <?php if ($total_students > 0): ?>
                             <div class="row g-2" id="student-cards">
                                 <?php
-                                $students_result->data_seek(0);
-                                while ($student = $students_result->fetch_assoc()):
+                                foreach ($students_list as $student):
                                     $student_roll = !empty($student['enrollmentNo']) ? $student['enrollmentNo'] : $student['id'];
                                     $student_batch = strtoupper(trim((string)$student['labBatch']));
                                     $student_lab = $batch_lab_map_normalized[$student_batch] ?? '';
@@ -711,7 +710,7 @@ if (!empty($batch_enrollments)) {
                                         </div>
                                     </label>
                                 </div>
-                                <?php endwhile; ?>
+                                <?php endforeach; ?>
                             </div>
 
                             <div class="pc-used-section mt-4 p-3" id="pc-used-container">

@@ -200,7 +200,9 @@ if ($hasFilterInput) {
             $stuStmt->bind_param('ss', $sem, $class);
             $stuStmt->execute();
             $stuRes = $stuStmt->get_result();
-            while ($student = $stuRes->fetch_assoc()) {
+            // Natural order so CO-1, CO-2 … CO-10 appear in sequence.
+            $stuRows = attendance_sort_students_naturally($stuRes->fetch_all(MYSQLI_ASSOC));
+            foreach ($stuRows as $student) {
                 $enrollment = trim((string)$student['enrollmentNo']);
                 if ($enrollment === '') {
                     continue;

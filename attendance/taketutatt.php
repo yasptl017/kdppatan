@@ -209,19 +209,21 @@ if (!empty($selected_tut_batches_normalized)) {
 if (!$students_result) {
     $students_result = $conn->query("SELECT id, enrollmentNo, name, tutBatch FROM students WHERE 1 = 0");
 }
-$total_students = $students_result->num_rows;
+// Re-order in PHP so prefixed enrollment numbers (CO-1, CO-2 … CO-10) list in
+// natural order within each batch. See attendance_sort_students_naturally().
+$students_list  = $students_result ? $students_result->fetch_all(MYSQLI_ASSOC) : [];
+$students_list  = attendance_sort_students_naturally($students_list, 'enrollmentNo', 'name', 'tutBatch');
+$total_students = count($students_list);
 
 // Collect enrolled numbers for the selected tutorial batches
 $tut_enrollments = [];
 if ($total_students > 0) {
-    $students_result->data_seek(0);
-    while ($s = $students_result->fetch_assoc()) {
+    foreach ($students_list as $s) {
         $enr = trim((string)($s['enrollmentNo'] ?? ''));
         if ($enr !== '') {
             $tut_enrollments[] = $enr;
         }
     }
-    $students_result->data_seek(0);
 }
 
 // ── Calculate tutorial attendance % per student for this subject ─────────────
@@ -232,15 +234,13 @@ $tut_sem_esc     = $conn->real_escape_string($data['sem'] ?? '');
 if ($tut_subject_esc !== '' && $tut_term_esc !== '' && $tut_sem_esc !== '' && !empty($selected_tut_batches_normalized) && $total_students > 0) {
     $enr_batch_map = [];
     $id_to_enrollment = [];
-    $students_result->data_seek(0);
-    while ($s = $students_result->fetch_assoc()) {
+    foreach ($students_list as $s) {
         $enr = trim((string)($s['enrollmentNo'] ?? ''));
         if ($enr !== '') {
             $enr_batch_map[$enr] = strtoupper(str_replace(' ', '', (string)$s['tutBatch']));
             $id_to_enrollment[(string)$s['id']] = $enr;
         }
     }
-    $students_result->data_seek(0);
 
     $pct_res = $conn->query("SELECT batch, presentNo FROM tutattendance WHERE term='{$tut_term_esc}' AND sem='{$tut_sem_esc}' AND subject='{$tut_subject_esc}'");
     if ($pct_res) {
@@ -494,7 +494,7 @@ usort($autofill_records, function($a, $b) {
 
                     <?php if ($total_students > 0): ?>
                         <div class="row g-2" id="student-cards">
-                            <?php while ($student = $students_result->fetch_assoc()):
+                            <?php foreach ($students_list as $student):
                                 $student_roll = !empty($student['enrollmentNo']) ? $student['enrollmentNo'] : $student['id'];
                                 $display_name = short_name($student['name']);
                                 $pct_val = $subject_att_pct[$student_roll] ?? -1;
@@ -515,7 +515,7 @@ usort($autofill_records, function($a, $b) {
                                         </div>
                                     </label>
                                 </div>
-                            <?php endwhile; ?>
+                            <?php endforeach; ?>
                         </div>
 
                         <div class="mt-3 d-flex align-items-center gap-2 flex-wrap">

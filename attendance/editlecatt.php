@@ -157,7 +157,10 @@ $escaped_term  = $conn->real_escape_string($record['term']);
 $escaped_sem   = $conn->real_escape_string($record['sem']);
 $escaped_class = $conn->real_escape_string($record['class']);
 $students_result = $conn->query("SELECT id, enrollmentNo, name, class FROM students WHERE term = '{$escaped_term}' AND sem = '{$escaped_sem}' AND class = '{$escaped_class}' ORDER BY enrollmentNo, name");
-$total_students = $students_result->num_rows;
+// Natural order so CO-1, CO-2 … CO-10 list correctly (not CO-1, CO-10, CO-2).
+$students_list  = $students_result ? $students_result->fetch_all(MYSQLI_ASSOC) : [];
+$students_list  = attendance_sort_students_naturally($students_list);
+$total_students = count($students_list);
 
 // This page only ever edits an already-filled record, so send the user back to
 // the filled view of My Attendance for the same term.
@@ -248,7 +251,7 @@ $my_attendance_url = 'myAttendance.php?' . http_build_query([
 
                         <?php if ($total_students > 0): ?>
                             <div class="row g-2" id="student-cards">
-                                <?php $students_result->data_seek(0); while ($student = $students_result->fetch_assoc()):
+                                <?php foreach ($students_list as $student):
                                     $roll         = !empty($student['enrollmentNo']) ? $student['enrollmentNo'] : $student['id'];
                                     $display_name = short_name($student['name']);
                                     $is_present   = isset($present_set[(string)$roll]);
@@ -265,7 +268,7 @@ $my_attendance_url = 'myAttendance.php?' . http_build_query([
                                             </div>
                                         </label>
                                     </div>
-                                <?php endwhile; ?>
+                                <?php endforeach; ?>
                             </div>
 
                             <div class="mt-3 d-flex align-items-center gap-2 flex-wrap">
