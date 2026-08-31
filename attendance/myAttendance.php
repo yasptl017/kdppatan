@@ -45,13 +45,68 @@ $conn->query("CREATE TABLE IF NOT EXISTS `lecmapping` (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
 
 // ── Auto-create exceptions table (holiday/skip slots) ─────────────────────────
+// Despite the legacy name, this table holds skips for lecture, lab AND tutorial
+// mappings — `mapping_type` disambiguates them (mapping ids are only unique
+// within their own table, so id alone would cross-contaminate types).
 $conn->query("CREATE TABLE IF NOT EXISTS `lecmapping_exceptions` (
-    `id`         INT  NOT NULL AUTO_INCREMENT,
-    `mapping_id` INT  NOT NULL,
-    `date`       DATE NOT NULL,
+    `id`           INT         NOT NULL AUTO_INCREMENT,
+    `mapping_type` VARCHAR(10) NOT NULL DEFAULT 'lecture',
+    `mapping_id`   INT         NOT NULL,
+    `date`         DATE        NOT NULL,
+    `class_or_batch` VARCHAR(50) NOT NULL DEFAULT '',
     PRIMARY KEY (`id`),
-    UNIQUE KEY `uq_mapping_date` (`mapping_id`, `date`)
+    UNIQUE KEY `uq_type_mapping_date_batch` (`mapping_type`, `mapping_id`, `date`, `class_or_batch`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+
+function exceptions_column_exists(mysqli $conn, string $column): bool {
+    $stmt = $conn->prepare("SELECT 1 FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'lecmapping_exceptions' AND COLUMN_NAME = ? LIMIT 1");
+    if (!$stmt) {
+        return false;
+    }
+    $stmt->bind_param('s', $column);
+    $stmt->execute();
+    $exists = $stmt->get_result()->num_rows > 0;
+    $stmt->close();
+    return $exists;
+}
+
+// Upgrade pre-existing installs that still have the lecture-only schema.
+function ensure_exceptions_columns(mysqli $conn): void {
+    if (!exceptions_column_exists($conn, 'mapping_type')) {
+        $conn->query("ALTER TABLE lecmapping_exceptions ADD COLUMN mapping_type VARCHAR(10) NOT NULL DEFAULT 'lecture' AFTER id");
+    }
+    if (!exceptions_column_exists($conn, 'class_or_batch')) {
+        $conn->query("ALTER TABLE lecmapping_exceptions ADD COLUMN class_or_batch VARCHAR(50) NOT NULL DEFAULT '' AFTER `date`");
+    }
+    // Replace the old (mapping_id, date) unique key, which would reject a lab
+    // skip on a date already skipped for a lecture with the same id.
+    $idx = $conn->query("SELECT 1 FROM information_schema.STATISTICS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'lecmapping_exceptions' AND INDEX_NAME = 'uq_mapping_date' LIMIT 1");
+    if ($idx && $idx->num_rows > 0) {
+        $conn->query("ALTER TABLE lecmapping_exceptions DROP INDEX `uq_mapping_date`");
+    }
+    $idx2 = $conn->query("SELECT 1 FROM information_schema.STATISTICS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'lecmapping_exceptions' AND INDEX_NAME = 'uq_type_mapping_date_batch' LIMIT 1");
+    if ($idx2 && $idx2->num_rows === 0) {
+        $conn->query("ALTER TABLE lecmapping_exceptions ADD UNIQUE KEY `uq_type_mapping_date_batch` (`mapping_type`, `mapping_id`, `date`, `class_or_batch`)");
+    }
+}
+
+ensure_exceptions_columns($conn);
+
+// Key for the in-memory exception lookup. An empty $class_or_batch means the
+// exception covers every batch of that mapping on that date (legacy rows, and
+// lecture mappings, which have a single class per slot).
+if (!function_exists('attendance_exception_key')) {
+    function attendance_exception_key($mapping_type, $mapping_id, $date, $class_or_batch = '') {
+        return strtolower(trim((string)$mapping_type)) . ':' . (int)$mapping_id . '|' . (string)$date
+             . '|' . strtolower(trim((string)$class_or_batch));
+    }
+    // True when this exact slot (mapping + date + batch) is skipped, either by a
+    // batch-specific exception or a whole-day one.
+    function attendance_is_skipped(array $exceptions_set, $mapping_type, $mapping_id, $date, $class_or_batch = '') {
+        return isset($exceptions_set[attendance_exception_key($mapping_type, $mapping_id, $date, '')])
+            || isset($exceptions_set[attendance_exception_key($mapping_type, $mapping_id, $date, $class_or_batch)]);
+    }
+}
 
 $session_faculty_name = $_SESSION['Name'] ?? '';
 
@@ -128,19 +183,26 @@ $week_start_str = $week_start_dt->format('Y-m-d');
 $week_end_str = $week_end_dt->format('Y-m-d');
 $expand_cap = new DateTime($today_str > $week_end_str ? $today_str : $week_end_str);
 
-// ── Load exceptions for this faculty's mappings ───────────────────────────────
-$exceptions_set = []; // "type:mapping_id|date" => true
+// ── Load exceptions for this faculty's mappings (all types) ───────────────────
+$exceptions_set = []; // "type:mapping_id|date|batch" => true
 if (!empty($mappings_rows)) {
-    $lec_mapping_ids = array_column(array_filter($mappings_rows, fn($r) => ($r['mapping_type'] ?? '') === 'lecture'), 'id');
-    if (!empty($lec_mapping_ids)) {
-        $exc_placeholders = implode(',', array_fill(0, count($lec_mapping_ids), '?'));
-        $exc_types = str_repeat('i', count($lec_mapping_ids));
-        $exc_stmt = $conn->prepare("SELECT mapping_id, date FROM lecmapping_exceptions WHERE mapping_id IN ($exc_placeholders)");
-        $exc_stmt->bind_param($exc_types, ...$lec_mapping_ids);
+    // Group mapping ids by type so a lab id 5 never picks up lecture id 5's skip.
+    $ids_by_type = [];
+    foreach ($mappings_rows as $mr) {
+        $t = (string)($mr['mapping_type'] ?? 'lecture');
+        $ids_by_type[$t][(int)$mr['id']] = true;
+    }
+    foreach ($ids_by_type as $type => $id_map) {
+        $type_ids = array_keys($id_map);
+        $exc_placeholders = implode(',', array_fill(0, count($type_ids), '?'));
+        $exc_stmt = $conn->prepare("SELECT mapping_id, date, class_or_batch FROM lecmapping_exceptions WHERE mapping_type = ? AND mapping_id IN ($exc_placeholders)");
+        if (!$exc_stmt) continue;
+        $exc_params = array_merge([$type], $type_ids);
+        $exc_stmt->bind_param('s' . str_repeat('i', count($type_ids)), ...$exc_params);
         $exc_stmt->execute();
         $exc_res = $exc_stmt->get_result();
         while ($er = $exc_res->fetch_assoc()) {
-            $exceptions_set['lecture:' . $er['mapping_id'] . '|' . $er['date']] = true;
+            $exceptions_set[attendance_exception_key($type, $er['mapping_id'], $er['date'], $er['class_or_batch'] ?? '')] = true;
         }
         $exc_stmt->close();
     }
@@ -217,7 +279,7 @@ if ($filter_term !== '') {
                         'class'        => $batch_label,
                         'slot'         => $slot_value,
                         'lab_no'       => $lab_label,
-                        'skipped'      => isset($exceptions_set[$mapping_type . ':' . (int)$m['id'] . '|' . $date_str]),
+                        'skipped'      => attendance_is_skipped($exceptions_set, $mapping_type, (int)$m['id'], $date_str, $batch_label),
                         'future'       => $is_future_date,
                     ];
                 }
@@ -237,7 +299,7 @@ if ($filter_term !== '') {
                         'class'        => $batch_label,
                         'slot'         => $slot_value,
                         'lab_no'       => '',
-                        'skipped'      => isset($exceptions_set[$mapping_type . ':' . (int)$m['id'] . '|' . $date_str]),
+                        'skipped'      => attendance_is_skipped($exceptions_set, $mapping_type, (int)$m['id'], $date_str, $batch_label),
                         'future'       => $is_future_date,
                     ];
                 }
@@ -253,7 +315,7 @@ if ($filter_term !== '') {
                     'class'        => (string)$stored_batch,
                     'slot'         => $slot_value,
                     'lab_no'       => '',
-                    'skipped'      => isset($exceptions_set[$mapping_type . ':' . (int)$m['id'] . '|' . $date_str]),
+                    'skipped'      => attendance_is_skipped($exceptions_set, $mapping_type, (int)$m['id'], $date_str, (string)$stored_batch),
                     'future'       => $is_future_date,
                 ];
             }
@@ -880,11 +942,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['autofill_pending_max'
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['skip_slot'])) {
     $skip_mapping_id = (int)($_POST['skip_mapping_id'] ?? 0);
     $skip_date       = trim((string)($_POST['skip_date'] ?? ''));
+    $skip_type       = strtolower(trim((string)($_POST['skip_mapping_type'] ?? 'lecture')));
+    $skip_batch      = trim((string)($_POST['skip_class'] ?? ''));
     $redirect_params = ['status' => $filter_status, 'mapping' => $filter_mapping, 'term' => $filter_term];
 
+    if (!in_array($skip_type, ['lecture', 'lab', 'tutorial'], true)) $skip_type = 'lecture';
+
     if ($skip_mapping_id > 0 && preg_match('/^\d{4}-\d{2}-\d{2}$/', $skip_date)) {
-        $stmt = $conn->prepare("INSERT IGNORE INTO lecmapping_exceptions (mapping_id, date) VALUES (?, ?)");
-        $stmt->bind_param('is', $skip_mapping_id, $skip_date);
+        $stmt = $conn->prepare("INSERT IGNORE INTO lecmapping_exceptions (mapping_type, mapping_id, date, class_or_batch) VALUES (?, ?, ?, ?)");
+        $stmt->bind_param('siss', $skip_type, $skip_mapping_id, $skip_date, $skip_batch);
         $stmt->execute();
         $stmt->close();
         $redirect_params['msg'] = "Slot on {$skip_date} removed (marked as holiday/skip).";
@@ -899,11 +965,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['skip_slot'])) {
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['restore_slot'])) {
     $restore_mapping_id = (int)($_POST['restore_mapping_id'] ?? 0);
     $restore_date       = trim((string)($_POST['restore_date'] ?? ''));
+    $restore_type       = strtolower(trim((string)($_POST['restore_mapping_type'] ?? 'lecture')));
+    $restore_batch      = trim((string)($_POST['restore_class'] ?? ''));
     $redirect_params = ['status' => $filter_status, 'mapping' => $filter_mapping, 'term' => $filter_term];
 
+    if (!in_array($restore_type, ['lecture', 'lab', 'tutorial'], true)) $restore_type = 'lecture';
+
     if ($restore_mapping_id > 0 && preg_match('/^\d{4}-\d{2}-\d{2}$/', $restore_date)) {
-        $stmt = $conn->prepare("DELETE FROM lecmapping_exceptions WHERE mapping_id = ? AND date = ?");
-        $stmt->bind_param('is', $restore_mapping_id, $restore_date);
+        // Clear both the batch-specific exception and any whole-day one, so a
+        // restore always makes the slot pending again.
+        $stmt = $conn->prepare("DELETE FROM lecmapping_exceptions WHERE mapping_type = ? AND mapping_id = ? AND date = ? AND (class_or_batch = ? OR class_or_batch = '')");
+        $stmt->bind_param('siss', $restore_type, $restore_mapping_id, $restore_date, $restore_batch);
         $stmt->execute();
         $stmt->close();
         $redirect_params['msg'] = "Slot on {$restore_date} restored.";
@@ -1267,6 +1339,8 @@ $day_names = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
                                         <?php if ($slot['skipped']): ?>
                                             <form method="POST" action="myAttendance.php?<?= htmlspecialchars(http_build_query(['term' => $filter_term, 'status' => $filter_status, 'mapping' => $filter_mapping])) ?>" class="d-inline-flex m-0">
                                                 <input type="hidden" name="restore_mapping_id" value="<?= (int)$slot['mapping_id'] ?>">
+                                                <input type="hidden" name="restore_mapping_type" value="<?= htmlspecialchars($slot['mapping_type']) ?>">
+                                                <input type="hidden" name="restore_class" value="<?= htmlspecialchars($slot['class']) ?>">
                                                 <input type="hidden" name="restore_date" value="<?= htmlspecialchars($slot['date']) ?>">
                                                 <button type="submit" name="restore_slot" class="action-btn action-btn-secondary" title="Restore slot" onclick="return confirm('Restore this slot on <?= htmlspecialchars($slot['date']) ?>?')">
                                                     <i class="bi bi-arrow-counterclockwise"></i>
@@ -1285,6 +1359,8 @@ $day_names = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
                                             </a>
                                             <form method="POST" action="myAttendance.php?<?= htmlspecialchars(http_build_query(['term' => $filter_term, 'status' => $filter_status, 'mapping' => $filter_mapping])) ?>" class="d-inline-flex m-0">
                                                 <input type="hidden" name="skip_mapping_id" value="<?= (int)$slot['mapping_id'] ?>">
+                                                <input type="hidden" name="skip_mapping_type" value="<?= htmlspecialchars($slot['mapping_type']) ?>">
+                                                <input type="hidden" name="skip_class" value="<?= htmlspecialchars($slot['class']) ?>">
                                                 <input type="hidden" name="skip_date" value="<?= htmlspecialchars($slot['date']) ?>">
                                                 <button type="submit" name="skip_slot" class="action-btn action-btn-secondary" title="Skip slot (holiday/no class)" onclick="return confirm('Skip slot on <?= htmlspecialchars($slot['date']) ?>? It will be removed from pending.')">
                                                     <i class="bi bi-slash-circle"></i>

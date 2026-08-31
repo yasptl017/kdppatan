@@ -67,6 +67,7 @@ if (empty($migrations)) {
         'db/migration_007_create_attendance_records.sql',
         'db/migration_008_create_attendance_studentmentor.sql',
         'db/migration_009_fix_attendance_column_widths.sql',
+        'db/migration_010_exceptions_all_mapping_types.sql',
     ];
 }
 

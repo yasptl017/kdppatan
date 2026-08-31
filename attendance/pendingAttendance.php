@@ -98,19 +98,47 @@ if ($tut_stmt) {
     $tut_stmt->close();
 }
 
-// ── Load ALL exceptions ──────────────────────────────────────────────────────
-$exceptions_set = [];
-$lec_ids = array_column(array_filter($mappings_rows, fn($r) => ($r['mapping_type'] ?? '') === 'lecture'), 'id');
-if (!empty($lec_ids)) {
-    $ph = implode(',', array_fill(0, count($lec_ids), '?'));
-    $exc_stmt = $conn->prepare("SELECT mapping_id, date FROM lecmapping_exceptions WHERE mapping_id IN ($ph)");
-    if ($exc_stmt) {
-        $exc_stmt->bind_param(str_repeat('i', count($lec_ids)), ...$lec_ids);
-        $exc_stmt->execute();
-        $exc_res = $exc_stmt->get_result();
-        while ($er = $exc_res->fetch_assoc()) $exceptions_set['lecture:' . $er['mapping_id'] . '|' . $er['date']] = true;
-        $exc_stmt->close();
+// ── Load ALL exceptions (lecture, lab and tutorial) ──────────────────────────
+if (!function_exists('attendance_exception_key')) {
+    function attendance_exception_key($mapping_type, $mapping_id, $date, $class_or_batch = '') {
+        return strtolower(trim((string)$mapping_type)) . ':' . (int)$mapping_id . '|' . (string)$date
+             . '|' . strtolower(trim((string)$class_or_batch));
     }
+    function attendance_is_skipped(array $exceptions_set, $mapping_type, $mapping_id, $date, $class_or_batch = '') {
+        return isset($exceptions_set[attendance_exception_key($mapping_type, $mapping_id, $date, '')])
+            || isset($exceptions_set[attendance_exception_key($mapping_type, $mapping_id, $date, $class_or_batch)]);
+    }
+}
+
+$exceptions_set = [];
+$exc_col_res = $conn->query("SELECT 1 FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'lecmapping_exceptions' AND COLUMN_NAME = 'mapping_type' LIMIT 1");
+$has_exc_type = ($exc_col_res instanceof mysqli_result) && $exc_col_res->num_rows > 0;
+$ids_by_type = [];
+foreach ($mappings_rows as $mr) {
+    $ids_by_type[(string)($mr['mapping_type'] ?? 'lecture')][(int)$mr['id']] = true;
+}
+foreach ($ids_by_type as $exc_type => $exc_id_map) {
+    $exc_ids = array_keys($exc_id_map);
+    if (empty($exc_ids)) continue;
+    $ph = implode(',', array_fill(0, count($exc_ids), '?'));
+    if ($has_exc_type) {
+        $exc_stmt = $conn->prepare("SELECT mapping_id, date, class_or_batch FROM lecmapping_exceptions WHERE mapping_type = ? AND mapping_id IN ($ph)");
+        if (!$exc_stmt) continue;
+        $exc_stmt->bind_param('s' . str_repeat('i', count($exc_ids)), ...array_merge([$exc_type], $exc_ids));
+    } else {
+        // Legacy schema (lecture-only, no batch column) — myAttendance.php
+        // upgrades it on first load.
+        if ($exc_type !== 'lecture') continue;
+        $exc_stmt = $conn->prepare("SELECT mapping_id, date, '' AS class_or_batch FROM lecmapping_exceptions WHERE mapping_id IN ($ph)");
+        if (!$exc_stmt) continue;
+        $exc_stmt->bind_param(str_repeat('i', count($exc_ids)), ...$exc_ids);
+    }
+    $exc_stmt->execute();
+    $exc_res = $exc_stmt->get_result();
+    while ($er = $exc_res->fetch_assoc()) {
+        $exceptions_set[attendance_exception_key($exc_type, $er['mapping_id'], $er['date'], $er['class_or_batch'] ?? '')] = true;
+    }
+    $exc_stmt->close();
 }
 
 // ── Expand mappings into slots ───────────────────────────────────────────────
@@ -157,7 +185,7 @@ foreach ($mappings_rows as $m) {
                         'term' => trim((string)$m['term']), 'sem' => (string)$m['sem'],
                         'subject' => (string)$m['subject'], 'class' => $bl,
                         'slot' => $slot_value, 'lab_no' => $ll,
-                        'skipped' => isset($exceptions_set[$mapping_type . ':' . (int)$m['id'] . '|' . $date_str]),
+                        'skipped' => attendance_is_skipped($exceptions_set, $mapping_type, (int)$m['id'], $date_str, $bl),
                     ];
                 }
             } elseif ($mapping_type === 'tutorial' && $parsed_batches !== null && is_array($parsed_batches[$dow] ?? null)) {
@@ -170,7 +198,7 @@ foreach ($mappings_rows as $m) {
                         'term' => trim((string)$m['term']), 'sem' => (string)$m['sem'],
                         'subject' => (string)$m['subject'], 'class' => $bl,
                         'slot' => $slot_value, 'lab_no' => '',
-                        'skipped' => isset($exceptions_set[$mapping_type . ':' . (int)$m['id'] . '|' . $date_str]),
+                        'skipped' => attendance_is_skipped($exceptions_set, $mapping_type, (int)$m['id'], $date_str, $bl),
                     ];
                 }
             } else {
@@ -180,7 +208,7 @@ foreach ($mappings_rows as $m) {
                     'term' => trim((string)$m['term']), 'sem' => (string)$m['sem'],
                     'subject' => (string)$m['subject'], 'class' => (string)$stored_batch,
                     'slot' => $slot_value, 'lab_no' => '',
-                    'skipped' => isset($exceptions_set[$mapping_type . ':' . (int)$m['id'] . '|' . $date_str]),
+                    'skipped' => attendance_is_skipped($exceptions_set, $mapping_type, (int)$m['id'], $date_str, (string)$stored_batch),
                 ];
             }
         }
