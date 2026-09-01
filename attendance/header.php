@@ -21,6 +21,7 @@ $manage_pages = [
     'manageslot.php',
     'managelabs.php',
     'managementor.php',
+    'manageholidays.php',
     'bulkupload.php',
     'editfaculty.php',
     'editsubjects.php',
@@ -218,6 +219,7 @@ $header_enrollment_search = htmlspecialchars(trim((string)($_GET['enrollment'] ?
                                 <li class="submenu-item"><a class="submenu-link <?= in_array($current_page, ['manageslot.php', 'editslot.php'], true) ? 'active' : '' ?>" href="manageslot.php"><i class="bi bi-clock me-1"></i>Slots</a></li>
                                 <li class="submenu-item"><a class="submenu-link <?= $current_page === 'managelabs.php' ? 'active' : '' ?>" href="managelabs.php"><i class="bi bi-building me-1"></i>Labs</a></li>
                                 <li class="submenu-item"><a class="submenu-link <?= $current_page === 'managementor.php' ? 'active' : '' ?>" href="managementor.php"><i class="bi bi-people-fill me-1"></i>Mentor</a></li>
+                                <li class="submenu-item"><a class="submenu-link <?= $current_page === 'manageholidays.php' ? 'active' : '' ?>" href="manageholidays.php"><i class="bi bi-calendar-x me-1"></i>Holidays</a></li>
                                 <li class="submenu-item"><a class="submenu-link <?= $current_page === 'bulkupload.php' ? 'active' : '' ?>" href="bulkupload.php"><i class="bi bi-upload me-1"></i>Bulk Upload</a></li>
                             </ul>
                         </div>

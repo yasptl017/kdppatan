@@ -208,6 +208,11 @@ if (!empty($mappings_rows)) {
     }
 }
 
+// ── Load holidays (non-teaching days) ────────────────────────────────────────
+// Slots that fall on an active holiday are never expanded, so they don't show up
+// in any view and don't count towards pending/filled stats.
+$holiday_dates = attendance_holiday_dates($conn);
+
 // ── Expand each mapping into individual date slots ───────────────────────────
 // slot_list: array of [mapping_id, mapping_type, date, faculty, term, sem, subject, class_or_batch, slot, batch_label, lab_label, skipped]
 $slot_list = [];
@@ -250,6 +255,8 @@ if ($filter_term !== '') {
         $dow = (int)$cur->format('w'); // 0=Sun … 6=Sat
         if (in_array($dow, $repeat_days, true)) {
             $date_str = $cur->format('Y-m-d');
+            // Holiday = no teaching, so this date produces no slots at all.
+            if (isset($holiday_dates[$date_str])) { $cur->modify('+1 day'); continue; }
             $dow_str = (string)$dow;
             $is_future_date = $date_str > $today_str;
             // Resolve per-day slot from JSON if stored
@@ -1045,6 +1052,20 @@ $skipped  = count(array_filter($stats_slot_list, fn($s) => $s['skipped']));
 $unfilled = $total - $filled - $skipped;
 
 $day_names = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+
+// ── Holiday banner data ───────────────────────────────────────────────────────
+// Faculty otherwise have no way to tell "no slots today" apart from "today is a
+// holiday", so surface today's holiday plus any others in the current week.
+$today_is_holiday = isset($holiday_dates[$today_str]);
+$holiday_notices = [];
+foreach ($holiday_dates as $h_date => $h_name) {
+    if ($h_date < $week_start_str || $h_date > $week_end_str) continue;
+    $label = date('D, d M', strtotime($h_date));
+    if ($h_name !== '') $label .= ' — ' . $h_name;
+    if ($h_date === $today_str) $label .= ' (today)';
+    $holiday_notices[$h_date] = $label;
+}
+ksort($holiday_notices);
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -1146,6 +1167,22 @@ $day_names = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
                     </div>
                 </div>
             </div>
+
+            <?php if (!empty($holiday_notices)): ?>
+            <div class="alert alert-info d-flex align-items-start gap-2 mb-3">
+                <i class="bi bi-calendar-x mt-1"></i>
+                <div>
+                    <?php if ($today_is_holiday): ?>
+                        <strong>Today is a holiday<?= $holiday_dates[$today_str] !== '' ? ' (' . htmlspecialchars($holiday_dates[$today_str]) . ')' : '' ?>.</strong>
+                        Today's slots are hidden because it is a non-teaching day.
+                    <?php else: ?>
+                        <strong>Holidays this week:</strong>
+                    <?php endif; ?>
+                    <div class="small mt-1"><?= implode(' &middot; ', array_map('htmlspecialchars', $holiday_notices)) ?></div>
+                    <div class="small text-muted mt-1">Need to file attendance for a class that actually ran on a holiday? Use <a href="extraAttendance.php">Extra Attendance</a>.</div>
+                </div>
+            </div>
+            <?php endif; ?>
 
             <!-- Table Card -->
             <div class="app-card shadow-sm mb-3 attendance-table-card">

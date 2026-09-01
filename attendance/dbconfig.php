@@ -194,6 +194,64 @@ if (!$conn instanceof mysqli) {
     }
 }
 
+if (!function_exists('attendance_holiday_dates')) {
+    /**
+     * Create the holidays table if it does not exist yet.
+     *
+     * Only the admin management page calls this; every other page uses
+     * attendance_holiday_dates(), which tolerates the table being absent so a
+     * fresh install never breaks before an admin opens Manage Holidays.
+     */
+    function attendance_ensure_holidays_table(mysqli $conn)
+    {
+        $conn->query("CREATE TABLE IF NOT EXISTS `holidays` (
+            `id`           INT          NOT NULL AUTO_INCREMENT,
+            `holiday_date` DATE         NOT NULL,
+            `name`         VARCHAR(150) NOT NULL DEFAULT '',
+            `status`       TINYINT(1)   NOT NULL DEFAULT 1,
+            `created_at`   DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            PRIMARY KEY (`id`),
+            UNIQUE KEY `uq_holiday_date` (`holiday_date`)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+    }
+
+    /**
+     * Active holidays as a lookup: 'Y-m-d' => holiday name.
+     *
+     * A holiday is a non-teaching day, so slot expansion skips these dates
+     * entirely. Disabled rows (status = 0) are ignored, which lets an admin
+     * cancel a holiday without losing the record.
+     *
+     * Returns an empty array when the table is missing, so pages keep working
+     * on installs where no holiday has ever been added.
+     */
+    function attendance_holiday_dates(mysqli $conn)
+    {
+        static $cache = null;
+        if ($cache !== null) {
+            return $cache;
+        }
+        $cache = [];
+        $res = @$conn->query("SELECT holiday_date, name FROM holidays WHERE status = 1");
+        if ($res instanceof mysqli_result) {
+            while ($row = $res->fetch_assoc()) {
+                $date = trim((string)$row['holiday_date']);
+                if ($date !== '') {
+                    $cache[$date] = (string)$row['name'];
+                }
+            }
+            $res->free();
+        }
+        return $cache;
+    }
+
+    /** True when $date (Y-m-d) is an active holiday. */
+    function attendance_is_holiday(array $holiday_dates, $date)
+    {
+        return isset($holiday_dates[(string)$date]);
+    }
+}
+
 if (!function_exists('attendance_sort_students_naturally')) {
     /**
      * Order student rows by enrollment number in natural (human) order.
