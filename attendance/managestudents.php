@@ -1,6 +1,111 @@
 <?php
 include 'dbconfig.php'; // Include database connection
 require_once __DIR__ . '/studentreport.config.php';
+require_once __DIR__ . '/vendor/autoload.php';
+
+use PhpOffice\PhpSpreadsheet\Cell\DataType;
+use PhpOffice\PhpSpreadsheet\Spreadsheet;
+use PhpOffice\PhpSpreadsheet\Style\Alignment;
+use PhpOffice\PhpSpreadsheet\Style\Border;
+use PhpOffice\PhpSpreadsheet\Style\Fill;
+use PhpOffice\PhpSpreadsheet\Writer\Xlsx;
+
+/**
+ * Stream the student list as an .xlsx download.
+ *
+ * The rows passed in are exactly the rows the table renders, in the same order,
+ * so the file always matches the list that was on screen when Export was clicked.
+ *
+ * @param array $rows          Student rows straight from the filtered query.
+ * @param array $filter_labels Human-readable list of the filters in force.
+ * @param array $filters       Raw filter values, used to name the file.
+ */
+function download_students_excel(array $rows, array $filter_labels, array $filters)
+{
+    $spreadsheet = new Spreadsheet();
+    $sheet = $spreadsheet->getActiveSheet();
+    $sheet->setTitle('Students');
+
+    $lastCol = 'I';
+
+    $sheet->mergeCells("A1:{$lastCol}1");
+    $sheet->setCellValue('A1', 'Student List');
+    $sheet->mergeCells("A2:{$lastCol}2");
+    $sheet->setCellValue('A2', empty($filter_labels)
+        ? 'All Students'
+        : 'Filters: ' . implode(', ', $filter_labels));
+    $sheet->mergeCells("A3:{$lastCol}3");
+    $sheet->setCellValue('A3', 'Total: ' . count($rows) . ' student(s)    Generated: ' . date('d-m-Y H:i'));
+
+    $headerRow = 5;
+    $headings = ['ID', 'Enrollment', 'Name', 'Sem', 'Class', 'Lab Batch', 'Tut Batch', 'Term', 'Status'];
+    $col = 'A';
+    foreach ($headings as $heading) {
+        $sheet->setCellValue($col . $headerRow, $heading);
+        $col++;
+    }
+
+    $rowNum = $headerRow + 1;
+    foreach ($rows as $row) {
+        $sheet->setCellValue("A{$rowNum}", (int)$row['id']);
+        // Enrollment numbers are long digit strings — force text so Excel keeps
+        // leading zeros and never switches to scientific notation.
+        $sheet->setCellValueExplicit("B{$rowNum}", (string)$row['enrollmentNo'], DataType::TYPE_STRING);
+        $sheet->setCellValue("C{$rowNum}", (string)$row['name']);
+        $sheet->setCellValue("D{$rowNum}", (string)$row['sem']);
+        $sheet->setCellValue("E{$rowNum}", (string)$row['class']);
+        $sheet->setCellValue("F{$rowNum}", (string)$row['labBatch']);
+        $sheet->setCellValue("G{$rowNum}", (string)$row['tutBatch']);
+        $sheet->setCellValue("H{$rowNum}", (string)$row['term']);
+        $sheet->setCellValue("I{$rowNum}", ((int)$row['status'] === 1) ? 'Active' : 'Disabled');
+        $rowNum++;
+    }
+
+    $lastDataRow = max($headerRow, $rowNum - 1);
+
+    $sheet->getStyle('A1:A3')->getFont()->setBold(true);
+    $sheet->getStyle('A1')->getFont()->setSize(14);
+    $sheet->getStyle("A1:{$lastCol}3")->getAlignment()->setHorizontal(Alignment::HORIZONTAL_CENTER);
+    $sheet->getStyle("A1:{$lastCol}3")->getAlignment()->setVertical(Alignment::VERTICAL_CENTER);
+
+    $sheet->getStyle("A{$headerRow}:{$lastCol}{$headerRow}")->getFont()->setBold(true);
+    $sheet->getStyle("A{$headerRow}:{$lastCol}{$headerRow}")->getFill()
+        ->setFillType(Fill::FILL_SOLID)->getStartColor()->setRGB('DCE6F1');
+    $sheet->getStyle("A{$headerRow}:{$lastCol}{$lastDataRow}")->getBorders()
+        ->getAllBorders()->setBorderStyle(Border::BORDER_THIN);
+    $sheet->getStyle("A{$headerRow}:{$lastCol}{$lastDataRow}")->getAlignment()
+        ->setVertical(Alignment::VERTICAL_CENTER);
+    $sheet->getStyle("B{$headerRow}:B{$lastDataRow}")->getNumberFormat()->setFormatCode('@');
+    $sheet->getStyle("A{$headerRow}:B{$lastDataRow}")->getAlignment()
+        ->setHorizontal(Alignment::HORIZONTAL_CENTER);
+    $sheet->getStyle("D{$headerRow}:{$lastCol}{$lastDataRow}")->getAlignment()
+        ->setHorizontal(Alignment::HORIZONTAL_CENTER);
+
+    $widths = ['A' => 8, 'B' => 20, 'C' => 32, 'D' => 8, 'E' => 8, 'F' => 11, 'G' => 11, 'H' => 12, 'I' => 11];
+    foreach ($widths as $column => $width) {
+        $sheet->getColumnDimension($column)->setWidth($width);
+    }
+    $sheet->freezePane('A' . ($headerRow + 1));
+
+    $name_parts = ['students'];
+    if ($filters['term'] !== '')    { $name_parts[] = 'term' . $filters['term']; }
+    if ($filters['sem'] !== '')     { $name_parts[] = 'sem' . $filters['sem']; }
+    if ($filters['class'] !== '')   { $name_parts[] = 'class' . $filters['class']; }
+    if ($filters['lab'] !== '')     { $name_parts[] = 'lab' . $filters['lab']; }
+    if ($filters['tut'] !== '')     { $name_parts[] = 'tut' . $filters['tut']; }
+    if ($filters['status'] === '1') { $name_parts[] = 'active'; }
+    if ($filters['status'] === '0') { $name_parts[] = 'disabled'; }
+    $filename = implode('_', $name_parts) . '_' . date('Y-m-d') . '.xlsx';
+    $filename = preg_replace('/[^A-Za-z0-9_\-.]/', '_', $filename);
+
+    header('Content-Type: application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    header('Content-Disposition: attachment;filename="' . $filename . '"');
+    header('Cache-Control: max-age=0');
+
+    $writer = new Xlsx($spreadsheet);
+    $writer->save('php://output');
+    exit;
+}
 
 // optional message from add/update/delete redirects
 $msg = '';
@@ -49,6 +154,7 @@ $filter_class  = isset($_GET['filter_class'])  ? trim((string)$_GET['filter_clas
 $filter_lab    = isset($_GET['filter_lab'])    ? trim((string)$_GET['filter_lab'])    : '';
 $filter_tut    = isset($_GET['filter_tut'])    ? trim((string)$_GET['filter_tut'])    : '';
 $filter_status = isset($_GET['filter_status']) ? trim((string)$_GET['filter_status']) : '';
+$export        = strtolower(trim((string)($_GET['export'] ?? '')));
 
 // Distinct option lists for filter dropdowns (so the form shows only real values
 // present in the students table).
@@ -205,6 +311,37 @@ if ($filter_class !== '')  { $active_filter_count++; }
 if ($filter_lab !== '')    { $active_filter_count++; }
 if ($filter_tut !== '')    { $active_filter_count++; }
 if ($filter_status !== '') { $active_filter_count++; }
+
+// Query string that carries only the filters into the export link. Built from
+// the parsed values rather than $_GET so stray parameters (msg, toggle_status_id)
+// are never replayed by clicking Export.
+$filter_query = [];
+if ($search !== '')        { $filter_query['search']        = $search; }
+if ($filter_term !== '')   { $filter_query['filter_term']   = $filter_term; }
+if ($filter_sem !== '')    { $filter_query['filter_sem']    = $filter_sem; }
+if ($filter_class !== '')  { $filter_query['filter_class']  = $filter_class; }
+if ($filter_lab !== '')    { $filter_query['filter_lab']    = $filter_lab; }
+if ($filter_tut !== '')    { $filter_query['filter_tut']    = $filter_tut; }
+if ($filter_status !== '') { $filter_query['filter_status'] = $filter_status; }
+$export_url = 'managestudents.php?' . http_build_query($filter_query + ['export' => 'excel']);
+
+// ─── Excel export (filtered) ─────────────────────────────────────────────────
+// Streams the same rows the table renders below, in the same order, so the
+// download matches the list on screen. Runs before any HTML is emitted.
+if ($export === 'excel' && $result && $total_filtered > 0) {
+    $export_rows = [];
+    while ($export_row = $result->fetch_assoc()) {
+        $export_rows[] = $export_row;
+    }
+    download_students_excel($export_rows, $active_filter_labels, [
+        'term'   => $filter_term,
+        'sem'    => $filter_sem,
+        'class'  => $filter_class,
+        'lab'    => $filter_lab,
+        'tut'    => $filter_tut,
+        'status' => $filter_status,
+    ]);
+}
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -387,6 +524,9 @@ if ($filter_status !== '') { $active_filter_count++; }
                                         <?php endif; ?>.
                                     </span>
                                 </div>
+                                <a href="<?= htmlspecialchars($export_url); ?>" class="btn btn-success btn-sm bulk-export-btn">
+                                    <i class="bi bi-file-earmark-excel me-1"></i>Export <?= (int)$total_filtered; ?>
+                                </a>
                                 <button type="button" class="btn btn-danger btn-sm bulk-delete-toggle" id="bulkDeleteToggle">
                                     <i class="bi bi-trash3 me-1"></i>Delete These <?= (int)$total_filtered; ?>
                                 </button>
@@ -578,8 +718,14 @@ if ($filter_status !== '') { $active_filter_count++; }
         color: #7f1d1d;
         line-height: 1.4;
     }
-    .bulk-delete-toggle {
+    .bulk-delete-toggle,
+    .bulk-export-btn {
         white-space: nowrap;
+    }
+    /* Export sits beside Delete in the red bar — keep it readable against
+       the light red background instead of inheriting the danger styling. */
+    .bulk-export-btn {
+        font-weight: 600;
     }
     .bulk-delete-confirm {
         flex: 1 1 100%;
@@ -603,6 +749,7 @@ if ($filter_status !== '') { $active_filter_count++; }
     }
     @media (max-width: 575.98px) {
         .bulk-delete-toggle,
+        .bulk-export-btn,
         .bulk-delete-actions .btn {
             width: 100%;
         }
