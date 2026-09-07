@@ -72,11 +72,6 @@
                                             </a>
                                         </div>
                                     <?php endif; ?>
-                                    
-                                    <p class="committee-date mt-3">
-                                        <i class="fas fa-calendar-alt me-2"></i>
-                                        <?php echo date("F d, Y", strtotime($committee['created_at'])); ?>
-                                    </p>
                                 </div>
                             </div>
                         </div>
