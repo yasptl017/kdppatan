@@ -179,6 +179,13 @@ $header_enrollment_search = htmlspecialchars(trim((string)($_GET['enrollment'] ?
                     </li>
 
                     <li class="nav-item">
+                        <a class="nav-link <?= $current_page === 'viewAttendance.php' ? 'active' : '' ?>" href="viewAttendance.php">
+                            <span class="nav-icon"><i class="bi bi-eye"></i></span>
+                            <span class="nav-link-text">View Attendance</span>
+                        </a>
+                    </li>
+
+                    <li class="nav-item">
                         <a class="nav-link <?= in_array($current_page, ['lecmuster.php', 'attendanceSummary.php'], true) ? 'active' : '' ?>" href="lecmuster.php">
                             <span class="nav-icon"><i class="bi bi-file-earmark-spreadsheet"></i></span>
                             <span class="nav-link-text">Muster Report</span>

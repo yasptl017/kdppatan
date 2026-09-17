@@ -311,6 +311,19 @@ $is_admin_user = strcasecmp($current_username, 'admin') === 0;
                     <div class="quick-access-card">
                         <div class="quick-access-card-body">
                             <div class="icon-wrapper">
+                                <i class="bi bi-eye"></i>
+                            </div>
+                            <h4 class="card-title">View Attendance</h4>
+                            <p class="card-description">Review all records by day</p>
+                        </div>
+                        <a class="app-card-link-mask" href="viewAttendance.php"></a>
+                    </div>
+                </div>
+
+                <div class="col-6 col-lg-3">
+                    <div class="quick-access-card">
+                        <div class="quick-access-card-body">
+                            <div class="icon-wrapper">
                                 <i class="bi bi-calendar-week"></i>
                             </div>
                             <h4 class="card-title">Add Mapping</h4>
