@@ -3,6 +3,7 @@ include('dbconfig.php');
 require 'vendor/autoload.php';
 
 use PhpOffice\PhpSpreadsheet\Cell\DataType;
+use PhpOffice\PhpSpreadsheet\Cell\Coordinate;
 use PhpOffice\PhpSpreadsheet\Spreadsheet;
 use PhpOffice\PhpSpreadsheet\Style\Alignment;
 use PhpOffice\PhpSpreadsheet\Style\Border;
@@ -149,87 +150,69 @@ function download_attendance_analysis_excel($rows, $filters, $students_count) {
     exit;
 }
 
-function download_subject_wise_attendance_excel($detailRows, $summaryRows, $filters, $students_count) {
+function download_subject_wise_attendance_excel($rows, $subjects, $filters, $students_count) {
     $spreadsheet = new Spreadsheet();
     $titleFill = '1F4E78';
     $headerFill = 'D9EAF7';
-
-    $detailSheet = $spreadsheet->getActiveSheet();
-    $detailSheet->setTitle('Subject-wise Detail');
-    $detailSheet->mergeCells('A1:H1');
-    $detailSheet->setCellValue('A1', 'Subject-wise Detailed Attendance Analysis');
-    $detailSheet->mergeCells('A2:H2');
-    $detailSheet->setCellValue('A2', 'Semester: ' . $filters['sem'] . '    Class: ' . $filters['class'] . '    Date Range: ' . $filters['start_date'] . ' to ' . $filters['end_date'] . '    Students: ' . $students_count);
-    $detailHeaders = ['Enrollment', 'Name', 'Class', 'Subject', 'Lab %', 'Lecture %', 'Tutorial %', 'Subject Overall %'];
-    $detailColumns = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H'];
-    foreach ($detailHeaders as $column => $label) {
-        $detailSheet->setCellValue($detailColumns[$column] . '4', $label);
+    $sheet = $spreadsheet->getActiveSheet();
+    $sheet->setTitle('Subject-wise Analysis');
+    $lastColumnIndex = 2 + (count($subjects) * 3) + 4;
+    $lastColumn = Coordinate::stringFromColumnIndex($lastColumnIndex);
+    $sheet->mergeCells("A1:{$lastColumn}1");
+    $sheet->setCellValue('A1', 'Subject-wise Detailed Attendance Analysis');
+    $sheet->mergeCells("A2:{$lastColumn}2");
+    $sheet->setCellValue('A2', 'Semester: ' . $filters['sem'] . '    Class: ' . $filters['class'] . '    Date Range: ' . $filters['start_date'] . ' to ' . $filters['end_date'] . '    Students: ' . $students_count);
+    $sheet->mergeCells('A4:A5');
+    $sheet->setCellValue('A4', 'Enrollment');
+    $sheet->mergeCells('B4:B5');
+    $sheet->setCellValue('B4', 'Name');
+    $columnIndex = 3;
+    foreach ($subjects as $subject) {
+        $startColumn = Coordinate::stringFromColumnIndex($columnIndex);
+        $endColumn = Coordinate::stringFromColumnIndex($columnIndex + 2);
+        $sheet->mergeCells("{$startColumn}4:{$endColumn}4");
+        $sheet->setCellValue("{$startColumn}4", $subject);
+        $sheet->setCellValue("{$startColumn}5", 'Lab %');
+        $sheet->setCellValue(Coordinate::stringFromColumnIndex($columnIndex + 1) . '5', 'Lec %');
+        $sheet->setCellValue("{$endColumn}5", 'Tut %');
+        $columnIndex += 3;
     }
-    $rowNumber = 5;
-    foreach ($detailRows as $row) {
-        $detailSheet->setCellValueExplicit("A{$rowNumber}", (string)$row['enrollment'], DataType::TYPE_STRING);
-        $detailSheet->setCellValue("B{$rowNumber}", $row['name']);
-        $detailSheet->setCellValue("C{$rowNumber}", $row['class']);
-        $detailSheet->setCellValue("D{$rowNumber}", $row['subject']);
-        $detailSheet->setCellValue("E{$rowNumber}", percent_display($row['lab_pct']));
-        $detailSheet->setCellValue("F{$rowNumber}", percent_display($row['lec_pct']));
-        $detailSheet->setCellValue("G{$rowNumber}", percent_display($row['tut_pct']));
-        $detailSheet->setCellValue("H{$rowNumber}", percent_display($row['subject_total_pct']));
+    foreach (['Overall Lab %', 'Overall Lec %', 'Overall Tut %', 'Overall %'] as $label) {
+        $column = Coordinate::stringFromColumnIndex($columnIndex++);
+        $sheet->mergeCells("{$column}4:{$column}5");
+        $sheet->setCellValue("{$column}4", $label);
+    }
+    $rowNumber = 6;
+    foreach ($rows as $row) {
+        $sheet->setCellValueExplicit("A{$rowNumber}", (string)$row['enrollment'], DataType::TYPE_STRING);
+        $sheet->setCellValue("B{$rowNumber}", $row['name']);
+        $columnIndex = 3;
+        foreach ($subjects as $subject) {
+            $stats = $row['subjects'][$subject] ?? ['lab_pct' => null, 'lec_pct' => null, 'tut_pct' => null];
+            $sheet->setCellValue(Coordinate::stringFromColumnIndex($columnIndex++) . $rowNumber, percent_display($stats['lab_pct']));
+            $sheet->setCellValue(Coordinate::stringFromColumnIndex($columnIndex++) . $rowNumber, percent_display($stats['lec_pct']));
+            $sheet->setCellValue(Coordinate::stringFromColumnIndex($columnIndex++) . $rowNumber, percent_display($stats['tut_pct']));
+        }
+        foreach (['lab_pct', 'lec_pct', 'tut_pct', 'total_pct'] as $key) {
+            $sheet->setCellValue(Coordinate::stringFromColumnIndex($columnIndex++) . $rowNumber, percent_display($row[$key]));
+        }
         $rowNumber++;
     }
-    $detailLastRow = max(4, $rowNumber - 1);
-    $detailSheet->getStyle('A1:H1')->getFont()->setBold(true)->setSize(14)->getColor()->setRGB('FFFFFF');
-    $detailSheet->getStyle('A1:H1')->getFill()->setFillType(Fill::FILL_SOLID)->getStartColor()->setRGB($titleFill);
-    $detailSheet->getStyle('A1:H2')->getAlignment()->setHorizontal(Alignment::HORIZONTAL_CENTER);
-    $detailSheet->getStyle('A4:H4')->getFont()->setBold(true);
-    $detailSheet->getStyle('A4:H4')->getFill()->setFillType(Fill::FILL_SOLID)->getStartColor()->setRGB($headerFill);
-    $detailSheet->getStyle("A4:H{$detailLastRow}")->getBorders()->getAllBorders()->setBorderStyle(Border::BORDER_THIN);
-    $detailSheet->getStyle("A4:H{$detailLastRow}")->getAlignment()->setVertical(Alignment::VERTICAL_CENTER);
-    $detailSheet->getStyle("A5:A{$detailLastRow}")->getNumberFormat()->setFormatCode('@');
-    $detailSheet->setAutoFilter("A4:H{$detailLastRow}");
-    $detailSheet->freezePane('A5');
-    foreach (['A' => 18, 'B' => 28, 'C' => 10, 'D' => 32, 'E' => 14, 'F' => 14, 'G' => 14, 'H' => 19] as $column => $width) {
-        $detailSheet->getColumnDimension($column)->setWidth($width);
-    }
-
-    $summarySheet = $spreadsheet->createSheet();
-    $summarySheet->setTitle('Overall Summary');
-    $summarySheet->mergeCells('A1:G1');
-    $summarySheet->setCellValue('A1', 'Overall Attendance Summary');
-    $summarySheet->mergeCells('A2:G2');
-    $summarySheet->setCellValue('A2', 'Semester: ' . $filters['sem'] . '    Class: ' . $filters['class'] . '    Date Range: ' . $filters['start_date'] . ' to ' . $filters['end_date'] . '    Students: ' . $students_count);
-    $summaryHeaders = ['Enrollment', 'Name', 'Class', 'Lab Overall %', 'Lecture Overall %', 'Tutorial Overall %', 'Combined Overall %'];
-    $summaryColumns = ['A', 'B', 'C', 'D', 'E', 'F', 'G'];
-    foreach ($summaryHeaders as $column => $label) {
-        $summarySheet->setCellValue($summaryColumns[$column] . '4', $label);
-    }
-    $rowNumber = 5;
-    foreach ($summaryRows as $row) {
-        $summarySheet->setCellValueExplicit("A{$rowNumber}", (string)$row['enrollment'], DataType::TYPE_STRING);
-        $summarySheet->setCellValue("B{$rowNumber}", $row['name']);
-        $summarySheet->setCellValue("C{$rowNumber}", $row['class']);
-        $summarySheet->setCellValue("D{$rowNumber}", percent_display($row['lab_pct']));
-        $summarySheet->setCellValue("E{$rowNumber}", percent_display($row['lec_pct']));
-        $summarySheet->setCellValue("F{$rowNumber}", percent_display($row['tut_pct']));
-        $summarySheet->setCellValue("G{$rowNumber}", percent_display($row['total_pct']));
-        $rowNumber++;
-    }
-    $summaryLastRow = max(4, $rowNumber - 1);
-    $summarySheet->getStyle('A1:G1')->getFont()->setBold(true)->setSize(14)->getColor()->setRGB('FFFFFF');
-    $summarySheet->getStyle('A1:G1')->getFill()->setFillType(Fill::FILL_SOLID)->getStartColor()->setRGB($titleFill);
-    $summarySheet->getStyle('A1:G2')->getAlignment()->setHorizontal(Alignment::HORIZONTAL_CENTER);
-    $summarySheet->getStyle('A4:G4')->getFont()->setBold(true);
-    $summarySheet->getStyle('A4:G4')->getFill()->setFillType(Fill::FILL_SOLID)->getStartColor()->setRGB($headerFill);
-    $summarySheet->getStyle("A4:G{$summaryLastRow}")->getBorders()->getAllBorders()->setBorderStyle(Border::BORDER_THIN);
-    $summarySheet->getStyle("A4:G{$summaryLastRow}")->getAlignment()->setVertical(Alignment::VERTICAL_CENTER);
-    $summarySheet->getStyle("A5:A{$summaryLastRow}")->getNumberFormat()->setFormatCode('@');
-    $summarySheet->setAutoFilter("A4:G{$summaryLastRow}");
-    $summarySheet->freezePane('A5');
-    foreach (['A' => 18, 'B' => 28, 'C' => 10, 'D' => 18, 'E' => 20, 'F' => 20, 'G' => 20] as $column => $width) {
-        $summarySheet->getColumnDimension($column)->setWidth($width);
-    }
-
-    $spreadsheet->setActiveSheetIndex(0);
+    $lastDataRow = max(5, $rowNumber - 1);
+    $sheet->getStyle("A1:{$lastColumn}1")->getFont()->setBold(true)->setSize(14)->getColor()->setRGB('FFFFFF');
+    $sheet->getStyle("A1:{$lastColumn}1")->getFill()->setFillType(Fill::FILL_SOLID)->getStartColor()->setRGB($titleFill);
+    $sheet->getStyle("A1:{$lastColumn}2")->getAlignment()->setHorizontal(Alignment::HORIZONTAL_CENTER);
+    $sheet->getStyle("A4:{$lastColumn}5")->getFont()->setBold(true);
+    $sheet->getStyle("A4:{$lastColumn}5")->getFill()->setFillType(Fill::FILL_SOLID)->getStartColor()->setRGB($headerFill);
+    $sheet->getStyle("A4:{$lastColumn}{$lastDataRow}")->getBorders()->getAllBorders()->setBorderStyle(Border::BORDER_THIN);
+    $sheet->getStyle("A4:{$lastColumn}{$lastDataRow}")->getAlignment()->setHorizontal(Alignment::HORIZONTAL_CENTER)->setVertical(Alignment::VERTICAL_CENTER);
+    $sheet->getStyle("A6:A{$lastDataRow}")->getNumberFormat()->setFormatCode('@');
+    $sheet->getStyle("B6:B{$lastDataRow}")->getAlignment()->setHorizontal(Alignment::HORIZONTAL_LEFT);
+    $sheet->setAutoFilter("A5:{$lastColumn}{$lastDataRow}");
+    $sheet->freezePane('C6');
+    $sheet->getColumnDimension('A')->setWidth(18);
+    $sheet->getColumnDimension('B')->setWidth(28);
+    for ($i = 3; $i <= $lastColumnIndex; $i++) $sheet->getColumnDimension(Coordinate::stringFromColumnIndex($i))->setWidth(14);
     $filename = preg_replace('/[^A-Za-z0-9_\-.]/', '_', 'subject_wise_attendance_sem' . $filters['sem'] . '_class' . $filters['class'] . '_' . $filters['start_date'] . '_to_' . $filters['end_date'] . '.xlsx');
     header('Content-Type: application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
     header('Content-Disposition: attachment;filename="' . $filename . '"');
@@ -481,7 +464,7 @@ $detail_requested = (string)($_GET['detail'] ?? '') === '1';
 $detail_export = strtolower(trim((string)($_GET['detail_export'] ?? '')));
 $detail_msg = '';
 $detail_rows = [];
-$detail_summary_rows = [];
+$detail_subject_names = [];
 $detail_students_count = 0;
 $detail_sem_result = $conn->query("SELECT sem FROM semester WHERE status = 1 ORDER BY sem");
 
@@ -578,28 +561,31 @@ if ($detail_requested) {
 
                 $detail_subject_names = array_keys($detail_subjects);
                 natcasesort($detail_subject_names);
-                foreach ($detail_order as $enrollment) {
+                if (empty($detail_subject_names)) {
+                    $detail_msg = 'No attendance records found in the selected range.';
+                } else foreach ($detail_order as $enrollment) {
                     $overall = ['lec_total' => 0, 'lec_present' => 0, 'lab_total' => 0, 'lab_present' => 0, 'tut_total' => 0, 'tut_present' => 0];
+                    $subject_percentages = [];
                     foreach ($detail_subject_names as $subject_name) {
                         $stats = $detail_stats[$enrollment][$subject_name] ?? ['lec_total' => 0, 'lec_present' => 0, 'lab_total' => 0, 'lab_present' => 0, 'tut_total' => 0, 'tut_present' => 0];
                         foreach ($overall as $key => $unused) $overall[$key] += $stats[$key];
-                        $subject_present = $stats['lec_present'] + $stats['lab_present'] + $stats['tut_present'];
-                        $subject_total = $stats['lec_total'] + $stats['lab_total'] + $stats['tut_total'];
-                        $detail_rows[] = [
-                            'enrollment' => $detail_students[$enrollment]['enrollment'], 'name' => $detail_students[$enrollment]['name'], 'class' => $detail_students[$enrollment]['class'], 'subject' => $subject_name,
-                            'lec_pct' => percent_value($stats['lec_present'], $stats['lec_total']), 'lab_pct' => percent_value($stats['lab_present'], $stats['lab_total']), 'tut_pct' => percent_value($stats['tut_present'], $stats['tut_total']), 'subject_total_pct' => percent_value($subject_present, $subject_total),
+                        $subject_percentages[$subject_name] = [
+                            'lec_pct' => percent_value($stats['lec_present'], $stats['lec_total']),
+                            'lab_pct' => percent_value($stats['lab_present'], $stats['lab_total']),
+                            'tut_pct' => percent_value($stats['tut_present'], $stats['tut_total']),
                         ];
                     }
                     $overall_present = $overall['lec_present'] + $overall['lab_present'] + $overall['tut_present'];
                     $overall_total = $overall['lec_total'] + $overall['lab_total'] + $overall['tut_total'];
-                    $detail_summary_rows[] = [
+                    $detail_rows[] = [
                         'enrollment' => $detail_students[$enrollment]['enrollment'], 'name' => $detail_students[$enrollment]['name'], 'class' => $detail_students[$enrollment]['class'],
+                        'subjects' => $subject_percentages,
                         'lec_pct' => percent_value($overall['lec_present'], $overall['lec_total']), 'lab_pct' => percent_value($overall['lab_present'], $overall['lab_total']), 'tut_pct' => percent_value($overall['tut_present'], $overall['tut_total']), 'total_pct' => percent_value($overall_present, $overall_total),
                     ];
                 }
 
                 if ($detail_export === 'excel' && !empty($detail_rows)) {
-                    download_subject_wise_attendance_excel($detail_rows, $detail_summary_rows, ['sem' => $detail_sem, 'class' => $detail_class, 'start_date' => $detail_start_date, 'end_date' => $detail_end_date], $detail_students_count);
+                    download_subject_wise_attendance_excel($detail_rows, $detail_subject_names, ['sem' => $detail_sem, 'class' => $detail_class, 'start_date' => $detail_start_date, 'end_date' => $detail_end_date], $detail_students_count);
                 }
                 if (empty($detail_rows) && $detail_msg === '') $detail_msg = 'No attendance records found in the selected range.';
             }
@@ -741,7 +727,7 @@ if ($detail_requested) {
                     <h2 id="subject-wise-analysis-title" class="h3 mb-0"><i class="bi bi-table me-2"></i>Subject-wise Detailed Analysis</h2>
                     <span class="badge text-bg-info">New</span>
                 </div>
-                <p class="text-muted">Generate one row per student and subject, with Lab, Lecture, Tutorial, and subject overall percentages. The overall summary below combines every subject for each student.</p>
+                <p class="text-muted">Generate one row per student. Every subject is shown as a three-column group: Lab %, Lec %, and Tut %, followed by the student's overall Lab, Lec, Tut, and combined percentages.</p>
 
                 <div class="app-card shadow-sm mb-3">
                     <div class="app-card-body">
@@ -790,31 +776,45 @@ if ($detail_requested) {
                     <div class="app-card shadow-sm mb-3">
                         <div class="app-card-body">
                             <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-2">
-                                <h3 class="h5 mb-0">Subject-wise Detail</h3>
+                                <h3 class="h5 mb-0">Student-wise Subject Attendance Matrix</h3>
                                 <a href="attendanceAnalysis.php?<?= htmlspecialchars(http_build_query(['detail' => '1', 'detail_sem' => $detail_sem, 'detail_class' => $detail_class, 'detail_start_date' => $detail_start_date, 'detail_end_date' => $detail_end_date, 'detail_export' => 'excel'])); ?>" class="btn btn-success btn-sm"><i class="bi bi-file-earmark-excel me-1"></i>Download Formatted Excel</a>
                             </div>
                             <div class="table-responsive">
                                 <table class="table table-sm table-bordered table-hover align-middle mb-0">
-                                    <thead class="table-light"><tr><th>Enroll</th><th>Name</th><th>Class</th><th>Subject</th><th>Lab %</th><th>Lecture %</th><th>Tutorial %</th><th>Subject Overall %</th></tr></thead>
+                                    <thead class="table-light">
+                                        <tr>
+                                            <th rowspan="2">Enroll</th>
+                                            <th rowspan="2">Name</th>
+                                            <?php foreach ($detail_subject_names as $subject_name): ?>
+                                                <th colspan="3" class="text-center"><?= htmlspecialchars($subject_name); ?></th>
+                                            <?php endforeach; ?>
+                                            <th rowspan="2">Overall Lab %</th>
+                                            <th rowspan="2">Overall Lec %</th>
+                                            <th rowspan="2">Overall Tut %</th>
+                                            <th rowspan="2">Overall %</th>
+                                        </tr>
+                                        <tr>
+                                            <?php foreach ($detail_subject_names as $subject_name): ?>
+                                                <th>Lab %</th><th>Lec %</th><th>Tut %</th>
+                                            <?php endforeach; ?>
+                                        </tr>
+                                    </thead>
                                     <tbody>
                                         <?php foreach ($detail_rows as $row): ?>
-                                            <tr><td><?= htmlspecialchars($row['enrollment']); ?></td><td><?= htmlspecialchars($row['name']); ?></td><td><?= htmlspecialchars($row['class']); ?></td><td><?= htmlspecialchars($row['subject']); ?></td><td><?= htmlspecialchars(percent_display($row['lab_pct'])); ?></td><td><?= htmlspecialchars(percent_display($row['lec_pct'])); ?></td><td><?= htmlspecialchars(percent_display($row['tut_pct'])); ?></td><td><strong><?= htmlspecialchars(percent_display($row['subject_total_pct'])); ?></strong></td></tr>
-                                        <?php endforeach; ?>
-                                    </tbody>
-                                </table>
-                            </div>
-                        </div>
-                    </div>
-
-                    <div class="app-card shadow-sm">
-                        <div class="app-card-body">
-                            <h3 class="h5 mb-3">Overall Student Summary</h3>
-                            <div class="table-responsive">
-                                <table class="table table-sm table-bordered align-middle mb-0">
-                                    <thead class="table-light"><tr><th>Enroll</th><th>Name</th><th>Class</th><th>Lab Overall %</th><th>Lecture Overall %</th><th>Tutorial Overall %</th><th>Combined Overall %</th></tr></thead>
-                                    <tbody>
-                                        <?php foreach ($detail_summary_rows as $row): ?>
-                                            <tr><td><?= htmlspecialchars($row['enrollment']); ?></td><td><?= htmlspecialchars($row['name']); ?></td><td><?= htmlspecialchars($row['class']); ?></td><td><?= htmlspecialchars(percent_display($row['lab_pct'])); ?></td><td><?= htmlspecialchars(percent_display($row['lec_pct'])); ?></td><td><?= htmlspecialchars(percent_display($row['tut_pct'])); ?></td><td><strong><?= htmlspecialchars(percent_display($row['total_pct'])); ?></strong></td></tr>
+                                            <tr>
+                                                <td><?= htmlspecialchars($row['enrollment']); ?></td>
+                                                <td><?= htmlspecialchars($row['name']); ?></td>
+                                                <?php foreach ($detail_subject_names as $subject_name): ?>
+                                                    <?php $subject_stats = $row['subjects'][$subject_name] ?? ['lab_pct' => null, 'lec_pct' => null, 'tut_pct' => null]; ?>
+                                                    <td><?= htmlspecialchars(percent_display($subject_stats['lab_pct'])); ?></td>
+                                                    <td><?= htmlspecialchars(percent_display($subject_stats['lec_pct'])); ?></td>
+                                                    <td><?= htmlspecialchars(percent_display($subject_stats['tut_pct'])); ?></td>
+                                                <?php endforeach; ?>
+                                                <td><?= htmlspecialchars(percent_display($row['lab_pct'])); ?></td>
+                                                <td><?= htmlspecialchars(percent_display($row['lec_pct'])); ?></td>
+                                                <td><?= htmlspecialchars(percent_display($row['tut_pct'])); ?></td>
+                                                <td><strong><?= htmlspecialchars(percent_display($row['total_pct'])); ?></strong></td>
+                                            </tr>
                                         <?php endforeach; ?>
                                     </tbody>
                                 </table>
