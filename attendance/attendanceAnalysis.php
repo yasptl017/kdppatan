@@ -213,6 +213,37 @@ function download_subject_wise_attendance_excel($rows, $subjects, $filters, $stu
     $sheet->getColumnDimension('A')->setWidth(18);
     $sheet->getColumnDimension('B')->setWidth(28);
     for ($i = 3; $i <= $lastColumnIndex; $i++) $sheet->getColumnDimension(Coordinate::stringFromColumnIndex($i))->setWidth(14);
+
+    // The counts sheet keeps the exact same layout as the percentage sheet,
+    // making it easy to compare a value such as 80.00% with its 8/10 source count.
+    $countSheet = clone $sheet;
+    $countSheet->setTitle('Attendance Counts');
+    $countSheet->setCellValue('A1', 'Subject-wise Attendance Counts (Present/Conducted)');
+    $columnIndex = 3;
+    foreach ($subjects as $subject) {
+        $countSheet->setCellValue(Coordinate::stringFromColumnIndex($columnIndex++) . '5', 'Lab Count');
+        $countSheet->setCellValue(Coordinate::stringFromColumnIndex($columnIndex++) . '5', 'Lec Count');
+        $countSheet->setCellValue(Coordinate::stringFromColumnIndex($columnIndex++) . '5', 'Tut Count');
+    }
+    foreach (['Overall Lab Count', 'Overall Lec Count', 'Overall Tut Count', 'Overall Count'] as $label) {
+        $countSheet->setCellValue(Coordinate::stringFromColumnIndex($columnIndex++) . '4', $label);
+    }
+    $rowNumber = 6;
+    foreach ($rows as $row) {
+        $columnIndex = 3;
+        foreach ($subjects as $subject) {
+            $stats = $row['subjects'][$subject] ?? ['lab_count' => '0/0', 'lec_count' => '0/0', 'tut_count' => '0/0'];
+            $countSheet->setCellValue(Coordinate::stringFromColumnIndex($columnIndex++) . $rowNumber, $stats['lab_count']);
+            $countSheet->setCellValue(Coordinate::stringFromColumnIndex($columnIndex++) . $rowNumber, $stats['lec_count']);
+            $countSheet->setCellValue(Coordinate::stringFromColumnIndex($columnIndex++) . $rowNumber, $stats['tut_count']);
+        }
+        foreach (['lab_count', 'lec_count', 'tut_count', 'total_count'] as $key) {
+            $countSheet->setCellValue(Coordinate::stringFromColumnIndex($columnIndex++) . $rowNumber, $row[$key]);
+        }
+        $rowNumber++;
+    }
+    $spreadsheet->addSheet($countSheet);
+    $spreadsheet->setActiveSheetIndex(0);
     $filename = preg_replace('/[^A-Za-z0-9_\-.]/', '_', 'subject_wise_attendance_sem' . $filters['sem'] . '_class' . $filters['class'] . '_' . $filters['start_date'] . '_to_' . $filters['end_date'] . '.xlsx');
     header('Content-Type: application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
     header('Content-Disposition: attachment;filename="' . $filename . '"');
@@ -573,6 +604,9 @@ if ($detail_requested) {
                             'lec_pct' => percent_value($stats['lec_present'], $stats['lec_total']),
                             'lab_pct' => percent_value($stats['lab_present'], $stats['lab_total']),
                             'tut_pct' => percent_value($stats['tut_present'], $stats['tut_total']),
+                            'lec_count' => $stats['lec_present'] . '/' . $stats['lec_total'],
+                            'lab_count' => $stats['lab_present'] . '/' . $stats['lab_total'],
+                            'tut_count' => $stats['tut_present'] . '/' . $stats['tut_total'],
                         ];
                     }
                     $overall_present = $overall['lec_present'] + $overall['lab_present'] + $overall['tut_present'];
@@ -581,6 +615,7 @@ if ($detail_requested) {
                         'enrollment' => $detail_students[$enrollment]['enrollment'], 'name' => $detail_students[$enrollment]['name'], 'class' => $detail_students[$enrollment]['class'],
                         'subjects' => $subject_percentages,
                         'lec_pct' => percent_value($overall['lec_present'], $overall['lec_total']), 'lab_pct' => percent_value($overall['lab_present'], $overall['lab_total']), 'tut_pct' => percent_value($overall['tut_present'], $overall['tut_total']), 'total_pct' => percent_value($overall_present, $overall_total),
+                        'lec_count' => $overall['lec_present'] . '/' . $overall['lec_total'], 'lab_count' => $overall['lab_present'] . '/' . $overall['lab_total'], 'tut_count' => $overall['tut_present'] . '/' . $overall['tut_total'], 'total_count' => $overall_present . '/' . $overall_total,
                     ];
                 }
 
