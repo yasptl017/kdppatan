@@ -6,91 +6,6 @@ $page_title = "Materials - " . $DEPARTMENT_NAME . " - K.D. Polytechnic";
 ?>
 <?php include '../assets/preload/head.php'; ?>
 
-<style>
-    .material-search-container { margin-bottom: 2rem; }
-    .search-box { position: relative; }
-    .search-box input {
-        padding-left: 40px;
-        height: 45px;
-        border: 2px solid #e3e6f0;
-        border-radius: 8px;
-        font-size: 15px;
-        transition: all 0.3s ease;
-    }
-    .search-box input:focus {
-        border-color: #4e73df;
-        box-shadow: 0 0 0 0.2rem rgba(78, 115, 223, 0.25);
-    }
-    .search-box i {
-        position: absolute;
-        left: 12px;
-        top: 50%;
-        transform: translateY(-50%);
-        color: #999;
-        pointer-events: none;
-    }
-    .subject-title {
-        color: #2d3748;
-        font-size: 1.25rem;
-        font-weight: 700;
-        margin: 2rem 0 1rem;
-        padding-bottom: .5rem;
-        border-bottom: 2px solid #e3e6f0;
-    }
-    .subject-title:first-child { margin-top: 0; }
-    .document-card {
-        background: #fff;
-        border: 1px solid #e3e6f0;
-        border-radius: 8px;
-        padding: 1.5rem;
-        transition: all 0.3s ease;
-        display: flex;
-        flex-direction: column;
-        height: 100%;
-        box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
-    }
-    .document-card:hover {
-        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
-        transform: translateY(-2px);
-    }
-    .document-icon {
-        font-size: 2.5rem;
-        color: #4e73df;
-        margin-bottom: 1rem;
-    }
-    .document-title {
-        color: #2d3748;
-        margin-bottom: 1rem;
-        font-weight: 600;
-        font-size: 16px;
-        overflow: hidden;
-        text-overflow: ellipsis;
-        white-space: nowrap;
-    }
-    .btn-accent {
-        background-color: #4e73df;
-        border-color: #4e73df;
-        color: white;
-        font-weight: 500;
-        transition: all 0.3s ease;
-    }
-    .btn-accent:hover {
-        background-color: #224abe;
-        border-color: #224abe;
-        color: white;
-    }
-    .no-data-message {
-        text-align: center;
-        padding: 3rem 1rem;
-    }
-    .no-data-message i {
-        font-size: 3rem;
-        color: #ddd;
-        margin-bottom: 1rem;
-        display: block;
-    }
-</style>
-
 <body>
     <?php include_once "../Admin/dbconfig.php"; ?>
 
@@ -130,110 +45,116 @@ $page_title = "Materials - " . $DEPARTMENT_NAME . " - K.D. Polytechnic";
 
     <section class="py-5 bg-light">
         <div class="container">
-            <?php if ($material_result && $material_result->num_rows > 0): ?>
-                <div class="material-search-container">
-                    <div class="search-box">
-                        <i class="fas fa-search"></i>
-                        <input type="text" id="materialSearch" class="form-control"
-                               placeholder="Search materials by subject or title...">
-                    </div>
-                </div>
-
-                <div id="materialGrid">
-                    <?php
-                    $currentSubject = null;
-                    $openRow = false;
-                    while ($material = $material_result->fetch_assoc()):
-                        if ($currentSubject !== $material['subject']):
-                            if ($openRow) {
-                                echo '</div>';
-                            }
-                            $currentSubject = $material['subject'];
-                            $openRow = true;
-                    ?>
-                            <h3 class="subject-title material-subject"><?php echo htmlspecialchars($currentSubject); ?></h3>
-                            <div class="row g-4 mb-2">
-                        <?php endif; ?>
-                        <div class="col-lg-4 col-md-6 material-item"
-                             data-title="<?php echo strtolower(htmlspecialchars($material['title'])); ?>"
-                             data-subject="<?php echo strtolower(htmlspecialchars($material['subject'])); ?>">
-                            <div class="document-card">
-                                <div class="document-icon">
-                                    <i class="fas fa-book-reader"></i>
-                                </div>
-                                <div class="document-content flex-grow-1">
-                                    <h5 class="document-title" title="<?php echo htmlspecialchars($material['title']); ?>">
-                                        <?php echo htmlspecialchars($material['title']); ?>
-                                    </h5>
-                                </div>
-                                <?php if (!empty($material['material_url'])): ?>
-                                    <a href="<?php echo htmlspecialchars($material['material_url']); ?>"
-                                       class="btn btn-accent btn-sm w-100 mt-auto"
-                                       target="_blank" rel="noopener noreferrer">
-                                        <i class="fas fa-external-link-alt me-2"></i>Open Link
-                                    </a>
-                                <?php else: ?>
-                                    <a href="../Admin/<?php echo htmlspecialchars($material['file_path']); ?>"
-                                       class="btn btn-accent btn-sm w-100 mt-auto"
-                                       target="_blank">
-                                        <i class="fas fa-download me-2"></i>Download / View
-                                    </a>
-                                <?php endif; ?>
+            <div class="row">
+                <div class="col-12">
+                    <div class="card shadow-sm border-0">
+                        <div class="card-header text-white" style="background: linear-gradient(135deg, #1e3a8a 0%, #3b82f6 100%);">
+                            <h5 class="mb-0"><i class="fas fa-book-reader me-2"></i><?php echo htmlspecialchars($DEPARTMENT_NAME); ?> - Materials</h5>
+                        </div>
+                        <div class="card-body p-4">
+                            <div class="table-responsive">
+                                <table id="materialTable" class="table table-hover align-middle" style="width:100%">
+                                    <thead>
+                                        <tr>
+                                            <th style="width: 80px;">Sr. No.</th>
+                                            <th>Subject</th>
+                                            <th>Title</th>
+                                            <th style="width: 140px;">Action</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        <?php if ($material_result && $material_result->num_rows > 0): ?>
+                                            <?php $sr_no = 1; while ($material = $material_result->fetch_assoc()): ?>
+                                                <tr>
+                                                    <td><?php echo $sr_no++; ?></td>
+                                                    <td><?php echo htmlspecialchars($material['subject']); ?></td>
+                                                    <td><?php echo htmlspecialchars($material['title']); ?></td>
+                                                    <td>
+                                                        <?php if (!empty($material['material_url'])): ?>
+                                                            <a href="<?php echo htmlspecialchars($material['material_url']); ?>" class="btn btn-sm btn-primary" target="_blank" rel="noopener noreferrer">
+                                                                <i class="fas fa-external-link-alt me-1"></i>Open Link
+                                                            </a>
+                                                        <?php else: ?>
+                                                            <a href="../Admin/<?php echo htmlspecialchars($material['file_path']); ?>" class="btn btn-sm btn-primary" target="_blank">
+                                                                <i class="fas fa-download me-1"></i>View
+                                                            </a>
+                                                        <?php endif; ?>
+                                                    </td>
+                                                </tr>
+                                            <?php endwhile; ?>
+                                        <?php endif; ?>
+                                    </tbody>
+                                </table>
                             </div>
                         </div>
-                    <?php endwhile; ?>
-                    <?php if ($openRow) echo '</div>'; ?>
+                    </div>
                 </div>
-            <?php else: ?>
-                <div class="no-data-message">
-                    <i class="fas fa-book"></i>
-                    <h4>No Materials Available</h4>
-                    <p>Materials for this department will be available soon.</p>
-                </div>
-            <?php endif; ?>
+            </div>
         </div>
     </section>
 
     <?php include '../assets/preload/footer.php'; ?>
 
+    <link rel="stylesheet" href="https://cdn.datatables.net/1.13.7/css/dataTables.bootstrap5.min.css">
+    <script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
+    <script src="https://cdn.datatables.net/1.13.7/js/jquery.dataTables.min.js"></script>
+    <script src="https://cdn.datatables.net/1.13.7/js/dataTables.bootstrap5.min.js"></script>
+    <style>
+        .dataTables_wrapper { padding: 0 !important; }
+        .dataTables_wrapper .dataTables_length,
+        .dataTables_wrapper .dataTables_filter { margin-bottom: 20px; }
+        .dataTables_wrapper .dataTables_length label,
+        .dataTables_wrapper .dataTables_filter label { margin: 0; font-weight: 500; color: #6b7280; }
+        .dataTables_wrapper .dataTables_length select { padding: 6px 30px 6px 12px; border: 1px solid #d1d5db; border-radius: 6px; font-size: 14px; margin: 0 8px; }
+        .dataTables_wrapper .dataTables_filter input { padding: 8px 15px; border: 1px solid #d1d5db; border-radius: 6px; font-size: 14px; width: 250px; margin-left: 8px; }
+        #materialTable thead th { background: #f9fafb !important; color: #1e3a8a !important; font-weight: 600 !important; border-bottom: 2px solid #e5e7eb !important; padding: 12px 15px !important; font-size: 14px !important; }
+        #materialTable tbody td { padding: 12px 15px !important; font-size: 14px !important; border-bottom: 1px solid #f3f4f6 !important; }
+        #materialTable tbody tr:hover { background-color: #f9fafb !important; }
+        .dataTables_wrapper .dataTables_info { padding-top: 15px; color: #6b7280; font-size: 14px; }
+        .dataTables_wrapper .dataTables_paginate { padding-top: 15px; }
+        .dataTables_wrapper .dataTables_empty { text-align: center; color: #9ca3af; padding: 30px !important; font-size: 15px; }
+        .dataTables_wrapper .dataTables_paginate .paginate_button { padding: 0 !important; margin: 0 !important; border: none !important; border-radius: 0 !important; color: inherit !important; background: none !important; }
+        .dataTables_wrapper .dataTables_paginate .paginate_button:hover,
+        .dataTables_wrapper .dataTables_paginate .paginate_button.current,
+        .dataTables_wrapper .dataTables_paginate .paginate_button.disabled { background: none !important; color: inherit !important; border-color: transparent !important; }
+        .dataTables_wrapper .dataTables_paginate .pagination { margin: 0; justify-content: flex-end; }
+        .dataTables_wrapper .page-link { padding: 8px 14px !important; border: 1px solid #e5e7eb !important; color: #1e3a8a !important; font-size: 14px !important; font-weight: 500 !important; margin: 0 3px !important; border-radius: 6px !important; background: #fff !important; }
+        .dataTables_wrapper .page-link:hover { background-color: #eff6ff !important; border-color: #3b82f6 !important; color: #1e3a8a !important; }
+        .dataTables_wrapper .page-item.active .page-link { background-color: #3b82f6 !important; border-color: #3b82f6 !important; color: #fff !important; }
+        .dataTables_wrapper .page-item.disabled .page-link { opacity: 0.5 !important; cursor: not-allowed !important; background-color: #fff !important; color: #9ca3af !important; border-color: #e5e7eb !important; }
+        @media (max-width: 768px) {
+            .dataTables_wrapper .dataTables_length,
+            .dataTables_wrapper .dataTables_filter,
+            .dataTables_wrapper .dataTables_info,
+            .dataTables_wrapper .dataTables_paginate { text-align: center; margin-bottom: 15px; }
+            .dataTables_wrapper .dataTables_filter input { width: 100%; margin: 10px 0 0; }
+            .dataTables_wrapper .dataTables_paginate .pagination { justify-content: center; }
+        }
+    </style>
     <script>
-        const materialSearch = document.getElementById('materialSearch');
-        if (materialSearch) {
-            materialSearch.addEventListener('keyup', function() {
-                const searchTerm = this.value.toLowerCase();
-                const items = document.querySelectorAll('.material-item');
-
-                items.forEach(item => {
-                    const title = item.getAttribute('data-title');
-                    const subject = item.getAttribute('data-subject');
-                    item.style.display = (title.includes(searchTerm) || subject.includes(searchTerm)) ? '' : 'none';
-                });
-
-                document.querySelectorAll('.material-subject').forEach(heading => {
-                    const row = heading.nextElementSibling;
-                    const visibleInGroup = row && Array.from(row.querySelectorAll('.material-item')).some(item => item.style.display !== 'none');
-                    heading.style.display = visibleInGroup ? '' : 'none';
-                    if (row) {
-                        row.style.display = visibleInGroup ? '' : 'none';
-                    }
-                });
-
-                const visibleItems = Array.from(items).filter(item => item.style.display !== 'none');
-                const noResultsMsg = document.getElementById('noResultsMessage');
-
-                if (visibleItems.length === 0) {
-                    if (!noResultsMsg) {
-                        const msg = document.createElement('div');
-                        msg.id = 'noResultsMessage';
-                        msg.className = 'no-data-message';
-                        msg.innerHTML = '<i class="fas fa-search"></i><h4>No Materials Found</h4><p>Try a different search term.</p>';
-                        document.getElementById('materialGrid').appendChild(msg);
-                    }
-                } else if (noResultsMsg) {
-                    noResultsMsg.remove();
+        $(document).ready(function() {
+            var table = $('#materialTable').DataTable({
+                "pageLength": 10,
+                "lengthMenu": [[10, 25, 50, -1], [10, 25, 50, "All"]],
+                "order": [[1, "asc"], [2, "asc"]],
+                "columnDefs": [{ "orderable": false, "targets": [0, 3] }],
+                "language": {
+                    "lengthMenu": "Show _MENU_ entries",
+                    "search": "Search:",
+                    "info": "Showing _START_ to _END_ of _TOTAL_ materials",
+                    "infoEmpty": "No materials available",
+                    "emptyTable": "No materials available",
+                    "zeroRecords": "No matching materials found"
                 }
             });
-        }
+
+            table.on('draw', function() {
+                var pageInfo = table.page.info();
+                table.column(0, {page: 'current'}).nodes().each(function(cell, i) {
+                    cell.innerHTML = pageInfo.start + i + 1;
+                });
+            });
+        });
     </script>
 </body>
 </html>
