@@ -206,6 +206,13 @@ $header_enrollment_search = htmlspecialchars(trim((string)($_GET['enrollment'] ?
                         </a>
                     </li>
 
+                    <li class="nav-item">
+                        <a class="nav-link <?= $current_page === 'alterArrangement.php' ? 'active' : '' ?>" href="alterArrangement.php">
+                            <span class="nav-icon"><i class="bi bi-arrow-left-right"></i></span>
+                            <span class="nav-link-text">Alter Arrangement</span>
+                        </a>
+                    </li>
+
                     <li class="nav-item has-submenu">
                         <a class="nav-link submenu-toggle <?= $is_manage_page ? 'active' : '' ?>" href="#" data-bs-toggle="collapse" data-bs-target="#submenu-1" aria-expanded="<?= $is_manage_page ? 'true' : 'false' ?>" aria-controls="submenu-1">
                             <span class="nav-icon"><i class="bi bi-gear"></i></span>
