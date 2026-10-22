@@ -178,10 +178,17 @@ if (isset($_GET['student_search'])) {
     $out = [];
     if (mb_strlen($q) >= 3) {
         $like = '%' . addcslashes($q, '%_\\') . '%';
-        $s = $conn->prepare("SELECT name, enrollmentNo, term, sem FROM students WHERE name LIKE ? ORDER BY name, term DESC LIMIT 15");
+        $s = $conn->prepare("SELECT name, enrollmentNo, term, sem FROM students WHERE name LIKE ? ORDER BY name LIMIT 300");
         $s->bind_param('s', $like);
         $s->execute();
-        $out = $s->get_result()->fetch_all(MYSQLI_ASSOC);
+        $latest = [];
+        foreach ($s->get_result()->fetch_all(MYSQLI_ASSOC) as $r) {
+            $k = $r['enrollmentNo'];
+            if (!isset($latest[$k]) || strnatcmp((string)$r['term'], (string)$latest[$k]['term']) > 0) {
+                $latest[$k] = $r;
+            }
+        }
+        $out = array_slice(array_values($latest), 0, 15);
         $s->close();
     }
     echo json_encode($out);
@@ -189,7 +196,6 @@ if (isset($_GET['student_search'])) {
 }
 
 $enrollment = trim((string)($_GET['enrollment'] ?? ''));
-$termFilter = trim((string)($_GET['term'] ?? ''));
 $msg = '';
 $student = null;
 $studentRecords = [];
@@ -198,15 +204,8 @@ $availableTerms = [];
 
 if ($enrollment !== '') {
     $studentSql = "SELECT id, enrollmentNo, name, term, sem, class, labBatch, tutBatch FROM students WHERE enrollmentNo = ?";
-    if ($termFilter !== '') {
-        $studentSql .= " AND term = ?";
-    }
     $studentStmt = $conn->prepare($studentSql . " ORDER BY id DESC");
-    if ($termFilter !== '') {
-        $studentStmt->bind_param('ss', $enrollment, $termFilter);
-    } else {
-        $studentStmt->bind_param('s', $enrollment);
-    }
+    $studentStmt->bind_param('s', $enrollment);
     $studentStmt->execute();
     $studentRes = $studentStmt->get_result();
     while ($studentRow = $studentRes->fetch_assoc()) {
@@ -423,7 +422,7 @@ if ($enrollment !== '') {
                     rows.forEach(function (r) {
                         var a = document.createElement('a');
                         a.className = 'list-group-item list-group-item-action small';
-                        a.href = 'studentAttendance.php?enrollment=' + encodeURIComponent(r.enrollmentNo) + '&term=' + encodeURIComponent(r.term);
+                        a.href = 'studentAttendance.php?enrollment=' + encodeURIComponent(r.enrollmentNo);
                         a.textContent = r.name + ' — Sem ' + r.sem + ' (Term ' + r.term + ')';
                         box.appendChild(a);
                     });

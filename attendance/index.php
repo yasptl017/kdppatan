@@ -44,10 +44,17 @@ if (isset($_GET['student_search'])) {
     $out = [];
     if (mb_strlen($q) >= 3) {
         $like = '%' . addcslashes($q, '%_\\') . '%';
-        $s = $conn->prepare("SELECT name, enrollmentNo, term, sem FROM students WHERE name LIKE ? ORDER BY name, term DESC LIMIT 15");
+        $s = $conn->prepare("SELECT name, enrollmentNo, term, sem FROM students WHERE name LIKE ? ORDER BY name LIMIT 300");
         $s->bind_param('s', $like);
         $s->execute();
-        $out = $s->get_result()->fetch_all(MYSQLI_ASSOC);
+        $latest = [];
+        foreach ($s->get_result()->fetch_all(MYSQLI_ASSOC) as $r) {
+            $k = $r['enrollmentNo'];
+            if (!isset($latest[$k]) || strnatcmp((string)$r['term'], (string)$latest[$k]['term']) > 0) {
+                $latest[$k] = $r;
+            }
+        }
+        $out = array_slice(array_values($latest), 0, 15);
         $s->close();
     }
     echo json_encode($out);
@@ -66,7 +73,6 @@ if (isset($_GET['student_search'])) {
 require_once __DIR__ . '/studentreport.config.php';
 
 $att_check_enrollment = trim((string)($_POST['check_enrollment'] ?? ''));
-$att_check_term_filter = trim((string)($_POST['check_term'] ?? ''));
 $att_check_terms = [];
 $att_check_error = '';
 $att_student_name = '';
@@ -112,15 +118,8 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['check_enrollment'])) {
     } else {
         // A student can appear in multiple terms; show all of them.
         $stu_sql = "SELECT id, enrollmentNo, name, term, sem, class, labBatch, tutBatch FROM students WHERE enrollmentNo = ?";
-        if ($att_check_term_filter !== '') {
-            $stu_sql .= " AND term = ?";
-        }
         $stu_stmt = $conn->prepare($stu_sql . " ORDER BY term DESC");
-        if ($att_check_term_filter !== '') {
-            $stu_stmt->bind_param('ss', $att_check_enrollment, $att_check_term_filter);
-        } else {
-            $stu_stmt->bind_param('s', $att_check_enrollment);
-        }
+        $stu_stmt->bind_param('s', $att_check_enrollment);
         $stu_stmt->execute();
         $att_students = $stu_stmt->get_result()->fetch_all(MYSQLI_ASSOC);
         $stu_stmt->close();
@@ -813,7 +812,6 @@ $conn->close();
                             <div id="att-name-results" class="list-group position-absolute w-100 shadow-sm d-none" style="z-index:10;max-height:260px;overflow-y:auto;"></div>
                         </div>
                         <input type="hidden" name="check_enrollment" id="att-name-enr">
-                        <input type="hidden" name="check_term" id="att-name-term">
                     </form>
 
                     <?php if (!empty($att_check_terms)): ?>
@@ -905,7 +903,6 @@ $conn->close();
                                         <form method="POST" action="index.php#att-check">
                                             <input type="hidden" name="check_enrollment"
                                                    value="<?php echo htmlspecialchars($att_check_enrollment); ?>">
-                                            <input type="hidden" name="check_term" value="<?php echo htmlspecialchars($att_check_term_filter); ?>">
                                             <label class="form-label" for="master_password">Master Password</label>
                                             <div class="input-group">
                                                 <input type="password" id="master_password" name="master_password"
@@ -933,7 +930,6 @@ $conn->close();
                                     <form method="POST" action="index.php#att-check">
                                         <input type="hidden" name="check_enrollment"
                                                value="<?php echo htmlspecialchars($att_check_enrollment); ?>">
-                                        <input type="hidden" name="check_term" value="<?php echo htmlspecialchars($att_check_term_filter); ?>">
                                         <button type="submit" class="btn btn-att-detail">
                                             <i class="bi bi-arrow-left me-1"></i>Back to Summary
                                         </button>
@@ -984,7 +980,6 @@ $conn->close();
                                 b.textContent = r.name + ' — Sem ' + r.sem + ' (Term ' + r.term + ')';
                                 b.addEventListener('click', function () {
                                     document.getElementById('att-name-enr').value = r.enrollmentNo;
-                                    document.getElementById('att-name-term').value = r.term;
                                     form.submit();
                                 });
                                 box.appendChild(b);
