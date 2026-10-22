@@ -37,6 +37,23 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['username'])) {
     $stmt->close();
 }
 
+// ── Name search (autocomplete) ───────────────────────────────────────────────
+if (isset($_GET['student_search'])) {
+    header('Content-Type: application/json; charset=utf-8');
+    $q = trim((string)$_GET['student_search']);
+    $out = [];
+    if (mb_strlen($q) >= 3) {
+        $like = '%' . addcslashes($q, '%_\\') . '%';
+        $s = $conn->prepare("SELECT name, enrollmentNo, term, sem FROM students WHERE name LIKE ? ORDER BY name, term DESC LIMIT 15");
+        $s->bind_param('s', $like);
+        $s->execute();
+        $out = $s->get_result()->fetch_all(MYSQLI_ASSOC);
+        $s->close();
+    }
+    echo json_encode($out);
+    exit();
+}
+
 // ── Student attendance check (public, enrollment number only) ────────────────
 // Shows subject-wise attendance percentage (lectures + labs + tutorials
 // combined per subject) grouped by term, along with the student's name and
@@ -49,6 +66,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['username'])) {
 require_once __DIR__ . '/studentreport.config.php';
 
 $att_check_enrollment = trim((string)($_POST['check_enrollment'] ?? ''));
+$att_check_term_filter = trim((string)($_POST['check_term'] ?? ''));
 $att_check_terms = [];
 $att_check_error = '';
 $att_student_name = '';
@@ -93,8 +111,16 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['check_enrollment'])) {
         $att_check_error = 'Please enter your enrollment number.';
     } else {
         // A student can appear in multiple terms; show all of them.
-        $stu_stmt = $conn->prepare("SELECT id, enrollmentNo, name, term, sem, class, labBatch, tutBatch FROM students WHERE enrollmentNo = ? ORDER BY term DESC");
-        $stu_stmt->bind_param('s', $att_check_enrollment);
+        $stu_sql = "SELECT id, enrollmentNo, name, term, sem, class, labBatch, tutBatch FROM students WHERE enrollmentNo = ?";
+        if ($att_check_term_filter !== '') {
+            $stu_sql .= " AND term = ?";
+        }
+        $stu_stmt = $conn->prepare($stu_sql . " ORDER BY term DESC");
+        if ($att_check_term_filter !== '') {
+            $stu_stmt->bind_param('ss', $att_check_enrollment, $att_check_term_filter);
+        } else {
+            $stu_stmt->bind_param('s', $att_check_enrollment);
+        }
         $stu_stmt->execute();
         $att_students = $stu_stmt->get_result()->fetch_all(MYSQLI_ASSOC);
         $stu_stmt->close();
@@ -139,6 +165,16 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['check_enrollment'])) {
                 }
 
                 // subject => per-mode totals, e.g. ['lecture_total' => n, 'lecture_present' => n, ...]
+                $mentor_name = '';
+                $men_stmt = $conn->prepare("SELECT mentorName FROM studentmentor WHERE term = ? AND enrollmentNo = ? AND status = 1 LIMIT 1");
+                if ($men_stmt) {
+                    $men_stmt->bind_param('ss', $stu_term, $stu_enr);
+                    $men_stmt->execute();
+                    $men_row = $men_stmt->get_result()->fetch_assoc();
+                    $mentor_name = trim((string)($men_row['mentorName'] ?? ''));
+                    $men_stmt->close();
+                }
+
                 $subject_totals = [];
                 $bump = function ($subject, $mode, $present) use (&$subject_totals) {
                     $subject = trim((string)$subject) === '' ? 'Unknown Subject' : trim((string)$subject);
@@ -214,6 +250,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['check_enrollment'])) {
                     $att_check_terms[] = [
                         'term' => $stu_term,
                         'sem' => $stu_sem,
+                        'mentor' => $mentor_name,
                         'class' => $stu_class,
                         'labBatch' => (string)$att_student['labBatch'],
                         'tutBatch' => (string)$att_student['tutBatch'],
@@ -769,6 +806,16 @@ $conn->close();
                         </div>
                     </form>
 
+                    <form method="POST" action="index.php#att-check" class="mt-2" id="att-name-form" autocomplete="off">
+                        <div class="position-relative">
+                            <input type="text" id="att-name-input" class="form-control" style="height:46px;"
+                                   placeholder="Or search by student name (min 3 letters)">
+                            <div id="att-name-results" class="list-group position-absolute w-100 shadow-sm d-none" style="z-index:10;max-height:260px;overflow-y:auto;"></div>
+                        </div>
+                        <input type="hidden" name="check_enrollment" id="att-name-enr">
+                        <input type="hidden" name="check_term" id="att-name-term">
+                    </form>
+
                     <?php if (!empty($att_check_terms)): ?>
                         <div class="att-check-result-wrap">
                             <div class="att-student-head">
@@ -783,6 +830,7 @@ $conn->close();
                             <?php foreach ($att_check_terms as $termGroup): ?>
                                 <div class="att-term-group">
                                     <div class="att-term-heading">Term <?php echo htmlspecialchars($termGroup['term']); ?> &middot; Sem <?php echo htmlspecialchars($termGroup['sem']); ?></div>
+                                    <div class="att-detail-meta"><i class="bi bi-person-badge me-1"></i>Mentor: <strong><?php echo htmlspecialchars($termGroup['mentor'] !== '' ? $termGroup['mentor'] : 'Not assigned'); ?></strong></div>
 
                                     <?php if ($att_detail_unlocked): ?>
                                         <div class="att-detail-meta">
@@ -857,6 +905,7 @@ $conn->close();
                                         <form method="POST" action="index.php#att-check">
                                             <input type="hidden" name="check_enrollment"
                                                    value="<?php echo htmlspecialchars($att_check_enrollment); ?>">
+                                            <input type="hidden" name="check_term" value="<?php echo htmlspecialchars($att_check_term_filter); ?>">
                                             <label class="form-label" for="master_password">Master Password</label>
                                             <div class="input-group">
                                                 <input type="password" id="master_password" name="master_password"
@@ -884,6 +933,7 @@ $conn->close();
                                     <form method="POST" action="index.php#att-check">
                                         <input type="hidden" name="check_enrollment"
                                                value="<?php echo htmlspecialchars($att_check_enrollment); ?>">
+                                        <input type="hidden" name="check_term" value="<?php echo htmlspecialchars($att_check_term_filter); ?>">
                                         <button type="submit" class="btn btn-att-detail">
                                             <i class="bi bi-arrow-left me-1"></i>Back to Summary
                                         </button>
@@ -909,6 +959,45 @@ $conn->close();
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.css">
     <script src="assets/js/pwa-install.js"></script>
     <script>
+        // Name search: type a name, pick a match (name + sem), details load.
+        (function () {
+            var input = document.getElementById('att-name-input');
+            var box = document.getElementById('att-name-results');
+            var form = document.getElementById('att-name-form');
+            var timer = null;
+            input.addEventListener('input', function () {
+                clearTimeout(timer);
+                var q = input.value.trim();
+                if (q.length < 3) { box.classList.add('d-none'); return; }
+                timer = setTimeout(function () {
+                    fetch('index.php?student_search=' + encodeURIComponent(q))
+                        .then(function (r) { return r.json(); })
+                        .then(function (rows) {
+                            box.innerHTML = '';
+                            if (!rows.length) {
+                                box.innerHTML = '<div class="list-group-item text-muted small">No match found</div>';
+                            }
+                            rows.forEach(function (r) {
+                                var b = document.createElement('button');
+                                b.type = 'button';
+                                b.className = 'list-group-item list-group-item-action small';
+                                b.textContent = r.name + ' — Sem ' + r.sem + ' (Term ' + r.term + ')';
+                                b.addEventListener('click', function () {
+                                    document.getElementById('att-name-enr').value = r.enrollmentNo;
+                                    document.getElementById('att-name-term').value = r.term;
+                                    form.submit();
+                                });
+                                box.appendChild(b);
+                            });
+                            box.classList.remove('d-none');
+                        });
+                }, 250);
+            });
+            document.addEventListener('click', function (e) {
+                if (!form.contains(e.target)) { box.classList.add('d-none'); }
+            });
+        })();
+
         // Reveal the master-password prompt when "Detailed Report" is clicked.
         (function () {
             var btn = document.getElementById('att-detail-btn');
