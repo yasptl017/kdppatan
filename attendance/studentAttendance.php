@@ -172,7 +172,24 @@ function build_term_summary(mysqli $conn, array $studentRecord) {
     ];
 }
 
+if (isset($_GET['student_search'])) {
+    header('Content-Type: application/json; charset=utf-8');
+    $q = trim((string)$_GET['student_search']);
+    $out = [];
+    if (mb_strlen($q) >= 3) {
+        $like = '%' . addcslashes($q, '%_\\') . '%';
+        $s = $conn->prepare("SELECT name, enrollmentNo, term, sem FROM students WHERE name LIKE ? ORDER BY name, term DESC LIMIT 15");
+        $s->bind_param('s', $like);
+        $s->execute();
+        $out = $s->get_result()->fetch_all(MYSQLI_ASSOC);
+        $s->close();
+    }
+    echo json_encode($out);
+    exit();
+}
+
 $enrollment = trim((string)($_GET['enrollment'] ?? ''));
+$termFilter = trim((string)($_GET['term'] ?? ''));
 $msg = '';
 $student = null;
 $studentRecords = [];
@@ -180,8 +197,16 @@ $termSummaries = [];
 $availableTerms = [];
 
 if ($enrollment !== '') {
-    $studentStmt = $conn->prepare("SELECT id, enrollmentNo, name, term, sem, class, labBatch, tutBatch FROM students WHERE enrollmentNo = ? ORDER BY id DESC");
-    $studentStmt->bind_param('s', $enrollment);
+    $studentSql = "SELECT id, enrollmentNo, name, term, sem, class, labBatch, tutBatch FROM students WHERE enrollmentNo = ?";
+    if ($termFilter !== '') {
+        $studentSql .= " AND term = ?";
+    }
+    $studentStmt = $conn->prepare($studentSql . " ORDER BY id DESC");
+    if ($termFilter !== '') {
+        $studentStmt->bind_param('ss', $enrollment, $termFilter);
+    } else {
+        $studentStmt->bind_param('s', $enrollment);
+    }
     $studentStmt->execute();
     $studentRes = $studentStmt->get_result();
     while ($studentRow = $studentRes->fetch_assoc()) {
@@ -249,10 +274,17 @@ if ($enrollment !== '') {
                         <div class="row g-2 align-items-end">
                             <div class="col-12 col-md-6 col-lg-4">
                                 <label class="form-label">Enrollment Number</label>
-                                <input type="text" name="enrollment" class="form-control" value="<?= htmlspecialchars($enrollment); ?>" placeholder="Enter Enrollment No" required>
+                                <input type="text" name="enrollment" class="form-control" value="<?= htmlspecialchars($enrollment); ?>" placeholder="Enter Enrollment No">
                             </div>
                             <div class="col-12 col-md-3 col-lg-2">
                                 <button type="submit" class="btn btn-primary w-100"><i class="bi bi-search me-1"></i>Search</button>
+                            </div>
+                        </div>
+                        <div class="row g-2 mt-2">
+                            <div class="col-12 col-md-6 col-lg-4 position-relative">
+                                <label class="form-label">Or Search by Name</label>
+                                <input type="text" id="name-input" class="form-control" placeholder="Type student name (min 3 letters)" autocomplete="off">
+                                <div id="name-results" class="list-group position-absolute w-100 shadow-sm d-none" style="z-index:20;max-height:280px;overflow-y:auto;"></div>
                             </div>
                         </div>
                     </form>
@@ -371,6 +403,39 @@ if ($enrollment !== '') {
     </div>
 </div>
 
+<script>
+(function () {
+    var input = document.getElementById('name-input');
+    var box = document.getElementById('name-results');
+    var timer = null;
+    input.addEventListener('input', function () {
+        clearTimeout(timer);
+        var q = input.value.trim();
+        if (q.length < 3) { box.classList.add('d-none'); return; }
+        timer = setTimeout(function () {
+            fetch('studentAttendance.php?student_search=' + encodeURIComponent(q))
+                .then(function (r) { return r.json(); })
+                .then(function (rows) {
+                    box.innerHTML = '';
+                    if (!rows.length) {
+                        box.innerHTML = '<div class="list-group-item text-muted small">No match found</div>';
+                    }
+                    rows.forEach(function (r) {
+                        var a = document.createElement('a');
+                        a.className = 'list-group-item list-group-item-action small';
+                        a.href = 'studentAttendance.php?enrollment=' + encodeURIComponent(r.enrollmentNo) + '&term=' + encodeURIComponent(r.term);
+                        a.textContent = r.name + ' — Sem ' + r.sem + ' (Term ' + r.term + ')';
+                        box.appendChild(a);
+                    });
+                    box.classList.remove('d-none');
+                });
+        }, 250);
+    });
+    document.addEventListener('click', function (e) {
+        if (e.target !== input && !box.contains(e.target)) { box.classList.add('d-none'); }
+    });
+})();
+</script>
 <?php include('footer.php'); ?>
 </body>
 </html>
