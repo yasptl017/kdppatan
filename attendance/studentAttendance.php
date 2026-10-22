@@ -284,7 +284,7 @@ if ($enrollment !== '') {
                             <div class="col-12 col-md-6 col-lg-4 position-relative">
                                 <label class="form-label">Or Search by Name</label>
                                 <input type="text" id="name-input" class="form-control" placeholder="Type student name (min 3 letters)" autocomplete="off">
-                                <div id="name-results" class="list-group position-absolute w-100 shadow-sm d-none" style="z-index:20;max-height:280px;overflow-y:auto;"></div>
+                                <div id="name-results" class="list-group w-100 shadow-sm d-none mt-1" style="max-height:280px;overflow-y:auto;"></div>
                             </div>
                         </div>
                     </form>
