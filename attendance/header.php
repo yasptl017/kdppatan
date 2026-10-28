@@ -132,6 +132,13 @@ $header_enrollment_search = htmlspecialchars(trim((string)($_GET['enrollment'] ?
                     </li>
 
                     <li class="nav-item">
+                        <a class="nav-link <?= $current_page === 'myPlanning.php' ? 'active' : '' ?>" href="myPlanning.php">
+                            <span class="nav-icon"><i class="bi bi-clipboard-data"></i></span>
+                            <span class="nav-link-text">My Planning</span>
+                        </a>
+                    </li>
+
+                    <li class="nav-item">
                         <a class="nav-link <?= $current_page === 'extraAttendance.php' ? 'active' : '' ?>" href="extraAttendance.php">
                             <span class="nav-icon"><i class="bi bi-plus-circle"></i></span>
                             <span class="nav-link-text">Extra Attendance</span>
