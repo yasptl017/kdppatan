@@ -212,6 +212,7 @@ if (!empty($mappings_rows)) {
 // Slots that fall on an active holiday are never expanded, so they don't show up
 // in any view and don't count towards pending/filled stats.
 $holiday_dates = attendance_holiday_dates($conn);
+$midsem_ranges = attendance_midsem_ranges($conn);
 
 // ── Expand each mapping into individual date slots ───────────────────────────
 // slot_list: array of [mapping_id, mapping_type, date, faculty, term, sem, subject, class_or_batch, slot, batch_label, lab_label, skipped]
@@ -507,6 +508,7 @@ foreach ($slot_list as &$slot) {
     }
     $slot['filled']        = $matched_key !== null;
     $slot['attendance_id'] = $matched_key !== null ? $filled_lookup[$matched_key] : null;
+    $slot['midsem']        = attendance_is_midsem($midsem_ranges, $slot['term'], $slot['sem'], $slot['date']);
 }
 unset($slot);
 
@@ -1332,6 +1334,7 @@ ksort($holiday_notices);
                                     $class_label = $mapping_type === 'lecture' ? 'Class' : 'Batch';
                                     $row_class = '';
                                     if ($slot['skipped']) $row_class = 'row-skipped';
+                                    elseif (!$slot['filled'] && !empty($slot['midsem'])) $row_class = 'row-midsem';
                                     elseif (!$slot['filled'] && $is_today) $row_class = 'row-today';
                                     elseif (!$slot['filled']) $row_class = 'row-pending';
                                 ?>
@@ -1358,6 +1361,9 @@ ksort($holiday_notices);
                                         <div class="subject-cell">
                                             <span class="subject-name"><?= htmlspecialchars($slot['subject']) ?></span>
                                             <span class="subject-sem">Sem <?= htmlspecialchars($slot['sem']) ?></span>
+                                            <?php if (!empty($slot['midsem'])): ?>
+                                                <span class="midsem-tag" title="Mid-sem exam period: mark attendance only if the lecture was actually taken"><i class="bi bi-exclamation-triangle-fill"></i> Midsem Exam</span>
+                                            <?php endif; ?>
                                         </div>
                                     </td>
                                     <td class="text-center col-class"><span class="class-badge"><?= htmlspecialchars($slot['class']) ?></span></td>
@@ -2282,6 +2288,27 @@ ksort($holiday_notices);
     background: linear-gradient(90deg, rgba(254, 226, 226, 0.4) 0%, rgba(254, 226, 226, 0.1) 100%) !important;
 }
 
+.row-midsem td {
+    background: #fdf2f8;
+    animation: midsemBlink 1.4s ease-in-out infinite;
+}
+.row-midsem:hover td { background: #fce7f3; }
+.midsem-tag {
+    display: inline-block;
+    margin-left: 0.4rem;
+    padding: 0.1rem 0.5rem;
+    border-radius: 1rem;
+    background: #be185d;
+    color: #fff;
+    font-size: 0.68rem;
+    font-weight: 700;
+    white-space: nowrap;
+    animation: midsemBlink 1.4s ease-in-out infinite;
+}
+@keyframes midsemBlink {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.55; }
+}
 .row-today td {
     background: linear-gradient(90deg, rgba(254, 243, 199, 0.4) 0%, rgba(254, 243, 199, 0.1) 100%) !important;
 }
@@ -2773,6 +2800,7 @@ ksort($holiday_notices);
     /* Status is conveyed by the left edge colour of each card. */
     .attendance-data-table tbody tr.row-pending { border-left-color: #f59e0b; }
     .attendance-data-table tbody tr.row-today   { border-left-color: #3949ab; }
+    .attendance-data-table tbody tr.row-midsem  { border-left-color: #be185d; }
     .attendance-data-table tbody tr.row-skipped { border-left-color: #94a3b8; opacity: 0.85; }
 
     /* Bootstrap styles cells via `.table > :not(caption) > * > *`, which beats a

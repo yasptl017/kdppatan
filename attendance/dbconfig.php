@@ -194,6 +194,50 @@ if (!$conn instanceof mysqli) {
     }
 }
 
+if (!function_exists('attendance_midsem_ranges')) {
+    /** Create the midsem exam table if it does not exist yet (admin page only). */
+    function attendance_ensure_midsem_table(mysqli $conn)
+    {
+        $conn->query("CREATE TABLE IF NOT EXISTS `midsem_exams` (
+            `id`         INT         NOT NULL AUTO_INCREMENT,
+            `term`       VARCHAR(20) NOT NULL,
+            `sem`        VARCHAR(10) NOT NULL,
+            `start_date` DATE        NOT NULL,
+            `end_date`   DATE        NOT NULL,
+            `created_at` DATETIME    NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            PRIMARY KEY (`id`),
+            KEY `idx_midsem_term_sem` (`term`, `sem`)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+    }
+
+    /** All midsem exam ranges (empty array when the table is missing). */
+    function attendance_midsem_ranges(mysqli $conn)
+    {
+        $out = [];
+        $res = @$conn->query("SELECT term, sem, start_date, end_date FROM midsem_exams");
+        if ($res instanceof mysqli_result) {
+            while ($row = $res->fetch_assoc()) {
+                $out[] = $row;
+            }
+            $res->free();
+        }
+        return $out;
+    }
+
+    /** True when $date (Y-m-d) falls inside a midsem exam range for this term + sem. */
+    function attendance_is_midsem(array $ranges, $term, $sem, $date)
+    {
+        foreach ($ranges as $r) {
+            if (trim((string)$r['term']) === trim((string)$term)
+                && trim((string)$r['sem']) === trim((string)$sem)
+                && $date >= $r['start_date'] && $date <= $r['end_date']) {
+                return true;
+            }
+        }
+        return false;
+    }
+}
+
 if (!function_exists('attendance_holiday_dates')) {
     /**
      * Create the holidays table if it does not exist yet.
