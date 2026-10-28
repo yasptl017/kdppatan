@@ -208,13 +208,21 @@ if (!function_exists('attendance_midsem_ranges')) {
             PRIMARY KEY (`id`),
             KEY `idx_midsem_term_sem` (`term`, `sem`)
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+        $col = $conn->query("SHOW COLUMNS FROM `midsem_exams` LIKE 'exam_mode'");
+        if ($col instanceof mysqli_result && $col->num_rows === 0) {
+            $conn->query("ALTER TABLE `midsem_exams` ADD COLUMN `exam_mode` VARCHAR(10) NOT NULL DEFAULT 'highlight' AFTER `end_date`");
+        }
     }
 
     /** All midsem exam ranges (empty array when the table is missing). */
     function attendance_midsem_ranges(mysqli $conn)
     {
         $out = [];
-        $res = @$conn->query("SELECT term, sem, start_date, end_date FROM midsem_exams");
+        $res = @$conn->query("SELECT term, sem, start_date, end_date, exam_mode FROM midsem_exams");
+        if (!($res instanceof mysqli_result)) {
+            // Older table without the exam_mode column: everything highlights.
+            $res = @$conn->query("SELECT term, sem, start_date, end_date, 'highlight' AS exam_mode FROM midsem_exams");
+        }
         if ($res instanceof mysqli_result) {
             while ($row = $res->fetch_assoc()) {
                 $out[] = $row;
@@ -224,17 +232,21 @@ if (!function_exists('attendance_midsem_ranges')) {
         return $out;
     }
 
-    /** True when $date (Y-m-d) falls inside a midsem exam range for this term + sem. */
-    function attendance_is_midsem(array $ranges, $term, $sem, $date)
+    /** 'hide', 'highlight' or '' when $date (Y-m-d) is in a midsem range for this term + sem. */
+    function attendance_midsem_mode(array $ranges, $term, $sem, $date)
     {
+        $mode = '';
         foreach ($ranges as $r) {
             if (trim((string)$r['term']) === trim((string)$term)
                 && trim((string)$r['sem']) === trim((string)$sem)
                 && $date >= $r['start_date'] && $date <= $r['end_date']) {
-                return true;
+                if ($r['exam_mode'] === 'hide') {
+                    return 'hide';
+                }
+                $mode = 'highlight';
             }
         }
-        return false;
+        return $mode;
     }
 }
 

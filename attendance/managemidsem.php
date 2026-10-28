@@ -31,6 +31,7 @@ if (isset($_POST['add_midsem']) || isset($_POST['update_midsem'])) {
     $sem   = trim((string)($_POST['sem'] ?? ''));
     $start = trim((string)($_POST['start_date'] ?? ''));
     $end   = trim((string)($_POST['end_date'] ?? ''));
+    $mode  = (($_POST['exam_mode'] ?? '') === 'hide') ? 'hide' : 'highlight';
 
     if ($term === '' || $sem === '' || !midsem_valid_date($start) || !midsem_valid_date($end)) {
         midsem_redirect(['err' => 'Term, Sem, Start date and End date are required.']);
@@ -40,15 +41,15 @@ if (isset($_POST['add_midsem']) || isset($_POST['update_midsem'])) {
     }
 
     if (isset($_POST['update_midsem']) && $id > 0) {
-        $stmt = $conn->prepare("UPDATE midsem_exams SET term = ?, sem = ?, start_date = ?, end_date = ? WHERE id = ?");
-        $stmt->bind_param('ssssi', $term, $sem, $start, $end, $id);
+        $stmt = $conn->prepare("UPDATE midsem_exams SET term = ?, sem = ?, start_date = ?, end_date = ?, exam_mode = ? WHERE id = ?");
+        $stmt->bind_param('sssssi', $term, $sem, $start, $end, $mode, $id);
         $stmt->execute();
         $stmt->close();
         midsem_redirect(['msg' => 'Midsem exam updated.']);
     }
 
-    $stmt = $conn->prepare("INSERT INTO midsem_exams (term, sem, start_date, end_date) VALUES (?, ?, ?, ?)");
-    $stmt->bind_param('ssss', $term, $sem, $start, $end);
+    $stmt = $conn->prepare("INSERT INTO midsem_exams (term, sem, start_date, end_date, exam_mode) VALUES (?, ?, ?, ?, ?)");
+    $stmt->bind_param('sssss', $term, $sem, $start, $end, $mode);
     $stmt->execute();
     $stmt->close();
     midsem_redirect(['msg' => 'Midsem exam added.']);
@@ -117,8 +118,8 @@ if ($form_sem !== '' && !in_array($form_sem, $sem_options, true)) $sem_options[]
 
             <div class="alert alert-info">
                 <i class="bi bi-info-circle me-2"></i>
-                Slots for the chosen term and semester that fall within these dates are highlighted (blinking) in
-                <strong>My Attendance</strong>, so faculty mark attendance only if a lecture was actually taken.
+                Slots for the chosen term and semester that fall within these dates are either <strong>highlighted</strong> (blinking, so faculty
+                mark attendance only if a lecture was actually taken) or <strong>hidden</strong> from <strong>My Attendance</strong>, as selected.
             </div>
 
             <div class="app-card shadow-sm mb-4">
@@ -153,6 +154,14 @@ if ($form_sem !== '' && !in_array($form_sem, $sem_options, true)) $sem_options[]
                                 <label class="form-label">End Date</label>
                                 <input type="date" name="end_date" class="form-control" value="<?= htmlspecialchars((string)($edit_row['end_date'] ?? '')) ?>" required>
                             </div>
+                            <div class="col-12 col-md-4">
+                                <label class="form-label">Slots in My Attendance</label>
+                                <?php $form_mode = $edit_row['exam_mode'] ?? 'highlight'; ?>
+                                <select name="exam_mode" class="form-control">
+                                    <option value="highlight" <?= $form_mode === 'highlight' ? 'selected' : '' ?>>Highlight (blinking)</option>
+                                    <option value="hide" <?= $form_mode === 'hide' ? 'selected' : '' ?>>Hide</option>
+                                </select>
+                            </div>
                             <div class="col-12 col-md-2 d-flex align-items-end gap-2">
                                 <button type="submit" name="<?= $edit_row ? 'update_midsem' : 'add_midsem' ?>" class="btn btn-primary flex-grow-1"><?= $edit_row ? 'Update' : 'Add' ?></button>
                                 <?php if ($edit_row): ?><a href="managemidsem.php" class="btn btn-outline-secondary">Cancel</a><?php endif; ?>
@@ -173,13 +182,14 @@ if ($form_sem !== '' && !in_array($form_sem, $sem_options, true)) $sem_options[]
                                     <th class="text-center">Sem</th>
                                     <th class="text-center">Start Date</th>
                                     <th class="text-center">End Date</th>
+                                    <th class="text-center">Mode</th>
                                     <th class="text-center">Status</th>
                                     <th class="text-center">Actions</th>
                                 </tr>
                             </thead>
                             <tbody>
                                 <?php if (empty($list)): ?>
-                                    <tr><td colspan="6" class="text-center text-muted py-4">No midsem exams added yet.</td></tr>
+                                    <tr><td colspan="7" class="text-center text-muted py-4">No midsem exams added yet.</td></tr>
                                 <?php else: foreach ($list as $row):
                                     if ($today_str < $row['start_date'])      { $st = ['Upcoming', 'info']; }
                                     elseif ($today_str > $row['end_date'])    { $st = ['Over', 'secondary']; }
@@ -190,6 +200,7 @@ if ($form_sem !== '' && !in_array($form_sem, $sem_options, true)) $sem_options[]
                                         <td class="text-center"><?= htmlspecialchars($row['sem']) ?></td>
                                         <td class="text-center"><?= date('d M Y', strtotime($row['start_date'])) ?></td>
                                         <td class="text-center"><?= date('d M Y', strtotime($row['end_date'])) ?></td>
+                                        <td class="text-center"><?= ($row['exam_mode'] ?? 'highlight') === 'hide' ? '<span class="badge bg-dark">Hide</span>' : '<span class="badge bg-warning text-dark">Highlight</span>' ?></td>
                                         <td class="text-center"><span class="badge bg-<?= $st[1] ?>"><?= $st[0] ?></span></td>
                                         <td class="text-center">
                                             <a href="managemidsem.php?edit=<?= (int)$row['id'] ?>" class="btn btn-warning btn-sm">Edit</a>

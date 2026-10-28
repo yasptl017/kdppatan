@@ -258,6 +258,8 @@ if ($filter_term !== '') {
             $date_str = $cur->format('Y-m-d');
             // Holiday = no teaching, so this date produces no slots at all.
             if (isset($holiday_dates[$date_str])) { $cur->modify('+1 day'); continue; }
+            // Midsem exam set to "hide": no slots for this term + sem on these dates.
+            if (attendance_midsem_mode($midsem_ranges, $mapping_term, (string)$m['sem'], $date_str) === 'hide') { $cur->modify('+1 day'); continue; }
             $dow_str = (string)$dow;
             $is_future_date = $date_str > $today_str;
             // Resolve per-day slot from JSON if stored
@@ -508,7 +510,7 @@ foreach ($slot_list as &$slot) {
     }
     $slot['filled']        = $matched_key !== null;
     $slot['attendance_id'] = $matched_key !== null ? $filled_lookup[$matched_key] : null;
-    $slot['midsem']        = attendance_is_midsem($midsem_ranges, $slot['term'], $slot['sem'], $slot['date']);
+    $slot['midsem']        = attendance_midsem_mode($midsem_ranges, $slot['term'], $slot['sem'], $slot['date']) === 'highlight';
 }
 unset($slot);
 
