@@ -425,6 +425,7 @@ if (!function_exists('attendance_norm_text')) {
     }
 }
 
+$all_absent_lookup = [];
 $filled_lookup = [];
 if (!empty($slot_list)) {
     // Collect unique term/sem combos to query efficiently
@@ -438,7 +439,7 @@ if (!empty($slot_list)) {
         $params = array_merge($unique_terms, $unique_sems);
 
         // Lecture attendance
-        $att_stmt = $conn->prepare("SELECT id, date, time, term, sem, subject, class FROM lecattendance WHERE term IN ($t_placeholders) AND sem IN ($s_placeholders)");
+        $att_stmt = $conn->prepare("SELECT id, date, time, term, sem, subject, class, presentNo FROM lecattendance WHERE term IN ($t_placeholders) AND sem IN ($s_placeholders)");
         $att_stmt->bind_param($types, ...$params);
         $att_stmt->execute();
         $att_res = $att_stmt->get_result();
@@ -447,11 +448,12 @@ if (!empty($slot_list)) {
             $key_loose  = attendance_loose_key('lecture', $ar['term'], $ar['sem'], $ar['subject'], $ar['class'], $ar['date'], $ar['time']);
             $filled_lookup[$key_strict] = (int)$ar['id'];
             $filled_lookup[$key_loose]  = (int)$ar['id'];
+            $all_absent_lookup[$key_strict] = $all_absent_lookup[$key_loose] = (trim((string)$ar['presentNo']) === '');
         }
         $att_stmt->close();
 
         // Lab attendance
-        $att_stmt = $conn->prepare("SELECT id, date, time, term, sem, subject, batch FROM labattendance WHERE term IN ($t_placeholders) AND sem IN ($s_placeholders)");
+        $att_stmt = $conn->prepare("SELECT id, date, time, term, sem, subject, batch, presentNo FROM labattendance WHERE term IN ($t_placeholders) AND sem IN ($s_placeholders)");
         $att_stmt->bind_param($types, ...$params);
         $att_stmt->execute();
         $att_res = $att_stmt->get_result();
@@ -460,11 +462,12 @@ if (!empty($slot_list)) {
             $key_loose  = attendance_loose_key('lab', $ar['term'], $ar['sem'], $ar['subject'], $ar['batch'], $ar['date'], $ar['time']);
             $filled_lookup[$key_strict] = (int)$ar['id'];
             $filled_lookup[$key_loose]  = (int)$ar['id'];
+            $all_absent_lookup[$key_strict] = $all_absent_lookup[$key_loose] = (trim((string)$ar['presentNo']) === '');
         }
         $att_stmt->close();
 
         // Tutorial attendance
-        $att_stmt = $conn->prepare("SELECT id, date, time, term, sem, subject, batch FROM tutattendance WHERE term IN ($t_placeholders) AND sem IN ($s_placeholders)");
+        $att_stmt = $conn->prepare("SELECT id, date, time, term, sem, subject, batch, presentNo FROM tutattendance WHERE term IN ($t_placeholders) AND sem IN ($s_placeholders)");
         $att_stmt->bind_param($types, ...$params);
         $att_stmt->execute();
         $att_res = $att_stmt->get_result();
@@ -473,6 +476,7 @@ if (!empty($slot_list)) {
             $key_loose  = attendance_loose_key('tutorial', $ar['term'], $ar['sem'], $ar['subject'], $ar['batch'], $ar['date'], $ar['time']);
             $filled_lookup[$key_strict] = (int)$ar['id'];
             $filled_lookup[$key_loose]  = (int)$ar['id'];
+            $all_absent_lookup[$key_strict] = $all_absent_lookup[$key_loose] = (trim((string)$ar['presentNo']) === '');
         }
         $att_stmt->close();
     }
@@ -510,6 +514,7 @@ foreach ($slot_list as &$slot) {
     }
     $slot['filled']        = $matched_key !== null;
     $slot['attendance_id'] = $matched_key !== null ? $filled_lookup[$matched_key] : null;
+    $slot['all_absent']    = $matched_key !== null && !empty($all_absent_lookup[$matched_key]);
     $slot['midsem']        = attendance_midsem_mode($midsem_ranges, $slot['term'], $slot['sem'], $slot['date']) === 'highlight';
 }
 unset($slot);
@@ -1022,6 +1027,8 @@ if ($filter_status === 'filled') {
     $slot_list = array_values(array_filter($slot_list, fn($s) => $s['filled'] && empty($s['future'])));
 } elseif ($filter_status === 'unfilled') {
     $slot_list = array_values(array_filter($slot_list, fn($s) => !$s['filled'] && !$s['skipped'] && empty($s['future'])));
+} elseif ($filter_status === 'absent') {
+    $slot_list = array_values(array_filter($slot_list, fn($s) => $s['filled'] && !empty($s['all_absent']) && empty($s['future'])));
 } elseif ($filter_status === 'skipped') {
     $slot_list = array_values(array_filter($slot_list, fn($s) => $s['skipped'] && empty($s['future'])));
 } elseif ($filter_status === 'week') {
@@ -1053,6 +1060,7 @@ while ($fr = $fres->fetch_assoc()) {
 $total    = count($stats_slot_list);
 $filled   = count(array_filter($stats_slot_list, fn($s) => $s['filled']));
 $skipped  = count(array_filter($stats_slot_list, fn($s) => $s['skipped']));
+$all_absent_count = count(array_filter($stats_slot_list, fn($s) => $s['filled'] && !empty($s['all_absent'])));
 $unfilled = $total - $filled - $skipped;
 
 $day_names = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
@@ -1198,6 +1206,7 @@ ksort($holiday_notices);
                             'week'     => ['label' => 'This Week', 'icon' => 'bi-calendar-week',  'count' => $week_slot_count],
                             'unfilled' => ['label' => 'Pending',   'icon' => 'bi-hourglass-split','count' => $unfilled],
                             'filled'   => ['label' => 'Filled',    'icon' => 'bi-check-circle',   'count' => $filled],
+                            'absent'   => ['label' => 'Absent',    'icon' => 'bi-person-x',       'count' => $all_absent_count],
                             'skipped'  => ['label' => 'Skipped',   'icon' => 'bi-slash-circle',   'count' => $skipped],
                         ];
                         $active_filter = isset($filter_options[$filter_status]) ? $filter_status : 'unfilled';
@@ -1229,6 +1238,10 @@ ksort($holiday_notices);
                             <a href="?<?= htmlspecialchars(http_build_query(['term' => $filter_term, 'status' => 'filled', 'mapping' => $filter_mapping])) ?>"
                                class="filter-pill filter-pill-success <?= $filter_status === 'filled' ? 'filter-pill-active' : '' ?>" title="Filled slots">
                                 Filled <span class="filter-pill-count"><?= $filled ?></span>
+                            </a>
+                            <a href="?<?= htmlspecialchars(http_build_query(['term' => $filter_term, 'status' => 'absent', 'mapping' => $filter_mapping])) ?>"
+                               class="filter-pill filter-pill-danger <?= $filter_status === 'absent' ? 'filter-pill-active' : '' ?>" title="Filled slots where all students were marked absent">
+                                Absent <span class="filter-pill-count"><?= $all_absent_count ?></span>
                             </a>
                             <a href="?<?= htmlspecialchars(http_build_query(['term' => $filter_term, 'status' => 'skipped', 'mapping' => $filter_mapping])) ?>"
                                class="filter-pill filter-pill-muted <?= $filter_status === 'skipped' ? 'filter-pill-active' : '' ?>" title="Skipped slots">
