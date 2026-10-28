@@ -154,7 +154,7 @@ function safe_sheet_title($baseTitle, array &$usedTitles) {
 }
 
 function write_muster_section($sheet, $students, $sessions, $term, $sem, $batch, $subjectDisplay, $startRow, $facultyDisplay = '') {
-    $totalCols = max(2, 2 + count($sessions));
+    $totalCols = max(3, 3 + count($sessions));
     $lastCol = Coordinate::stringFromColumnIndex($totalCols);
 
     $titleRow = $startRow;
@@ -177,22 +177,25 @@ function write_muster_section($sheet, $students, $sessions, $term, $sem, $batch,
     $sheet->mergeCells("A{$metaRow3}:{$lastCol}{$metaRow3}");
     $sheet->setCellValue("A{$metaRow3}", 'Semester: ' . $sem . ' - Batch: ' . $batch);
 
-    $sheet->setCellValue('A' . $headerRow, 'Enrollment');
-    $sheet->setCellValue('B' . $headerRow, 'Name');
+    $sheet->setCellValue('A' . $headerRow, 'Sr. No.');
+    $sheet->setCellValue('B' . $headerRow, 'Enrollment');
+    $sheet->setCellValue('C' . $headerRow, 'Name');
 
     foreach ($sessions as $index => $session) {
-        $col = $index + 3;
+        $col = $index + 4;
         $sheet->setCellValue(Coordinate::stringFromColumnIndex($col) . $headerRow, $session['date_label']);
     }
 
     $row = $headerRow + 1;
+    $serial = 1; // restarts at 1 for every class / batch section on every sheet
     foreach ($students as $student) {
         $enrollment = $student['enrollmentNo'];
-        $sheet->setCellValueExplicit("A{$row}", (string)$enrollment, DataType::TYPE_STRING);
-        $sheet->setCellValue("B{$row}", $student['name']);
+        $sheet->setCellValue("A{$row}", $serial++);
+        $sheet->setCellValueExplicit("B{$row}", (string)$enrollment, DataType::TYPE_STRING);
+        $sheet->setCellValue("C{$row}", $student['name']);
 
         foreach ($sessions as $index => $session) {
-            $col = $index + 3;
+            $col = $index + 4;
             $present = isset($session['present_set'][$enrollment]);
             $sheet->setCellValue(Coordinate::stringFromColumnIndex($col) . $row, $present ? 'P' : 'A');
         }
@@ -212,22 +215,23 @@ function write_muster_section($sheet, $students, $sessions, $term, $sem, $batch,
     $sheet->getStyle("A{$headerRow}:{$lastCol}{$headerRow}")->getFill()->setFillType(Fill::FILL_SOLID)->getStartColor()->setRGB('DCE6F1');
     $sheet->getStyle("A{$headerRow}:{$lastCol}{$headerRow}")->getAlignment()->setHorizontal(Alignment::HORIZONTAL_CENTER);
     $sheet->getStyle("A{$headerRow}:{$lastCol}{$headerRow}")->getAlignment()->setVertical(Alignment::VERTICAL_CENTER);
-    if ($totalCols >= 3) {
-        $sheet->getStyle("C{$headerRow}:{$lastCol}{$headerRow}")->getAlignment()->setWrapText(true);
-        $sheet->getStyle("C{$headerRow}:{$lastCol}{$headerRow}")->getAlignment()->setTextRotation(90);
+    if ($totalCols >= 4) {
+        $sheet->getStyle("D{$headerRow}:{$lastCol}{$headerRow}")->getAlignment()->setWrapText(true);
+        $sheet->getStyle("D{$headerRow}:{$lastCol}{$headerRow}")->getAlignment()->setTextRotation(90);
     }
 
     $sheet->getStyle("A{$headerRow}:{$lastCol}{$lastDataRow}")->getBorders()->getAllBorders()->setBorderStyle(Border::BORDER_THIN);
-    $sheet->getStyle("A{$headerRow}:A{$lastDataRow}")->getAlignment()->setHorizontal(Alignment::HORIZONTAL_CENTER);
-    $sheet->getStyle("B{$headerRow}:B{$lastDataRow}")->getAlignment()->setHorizontal(Alignment::HORIZONTAL_LEFT);
-    if ($totalCols >= 3) {
-        $sheet->getStyle("C{$headerRow}:{$lastCol}{$lastDataRow}")->getAlignment()->setHorizontal(Alignment::HORIZONTAL_CENTER);
+    $sheet->getStyle("A{$headerRow}:B{$lastDataRow}")->getAlignment()->setHorizontal(Alignment::HORIZONTAL_CENTER);
+    $sheet->getStyle("C{$headerRow}:C{$lastDataRow}")->getAlignment()->setHorizontal(Alignment::HORIZONTAL_LEFT);
+    if ($totalCols >= 4) {
+        $sheet->getStyle("D{$headerRow}:{$lastCol}{$lastDataRow}")->getAlignment()->setHorizontal(Alignment::HORIZONTAL_CENTER);
     }
 
-    $sheet->getColumnDimension('A')->setWidth(16);
-    $sheet->getColumnDimension('B')->setWidth(30);
-    $sheet->getStyle("A{$headerRow}:A{$lastDataRow}")->getNumberFormat()->setFormatCode('@');
-    for ($colIndex = 3; $colIndex <= $totalCols; $colIndex++) {
+    $sheet->getColumnDimension('A')->setWidth(7);
+    $sheet->getColumnDimension('B')->setWidth(16);
+    $sheet->getColumnDimension('C')->setWidth(30);
+    $sheet->getStyle("B{$headerRow}:B{$lastDataRow}")->getNumberFormat()->setFormatCode('@');
+    for ($colIndex = 4; $colIndex <= $totalCols; $colIndex++) {
         $sheet->getColumnDimension(Coordinate::stringFromColumnIndex($colIndex))->setWidth(5);
     }
 
