@@ -612,13 +612,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && strtolower(trim((string)($_POST['re
                     $attSql = "SELECT id, date, time, presentNo FROM lecattendance WHERE term = ? AND sem = ? AND subject = ? AND class = ? AND (faculty = ? OR faculty = ?)";
                     $attStmt = $conn->prepare($attSql);
                     $attStmt->bind_param('ssssss', $term, $sem, $subject, $class, $faculty_id, $faculty_name);
-                } else {
-                    $typeCondition = ($attendance_type === 'lab')
-                        ? "AND COALESCE(TRIM(labNo), '') <> ''"
-                        : "AND COALESCE(TRIM(labNo), '') = ''";
-                    $attSql = "SELECT id, date, time, batch, presentNo FROM labattendance WHERE term = ? AND sem = ? AND subject = ? AND (faculty = ? OR faculty = ?) {$typeCondition}";
+                } elseif ($attendance_type === 'lab') {
+                    $attSql = "SELECT id, date, time, batch, presentNo FROM labattendance WHERE term = ? AND sem = ? AND subject = ? AND (faculty = ? OR faculty = ?) AND COALESCE(TRIM(labNo), '') <> ''";
                     $attStmt = $conn->prepare($attSql);
                     $attStmt->bind_param('sssss', $term, $sem, $subject, $faculty_id, $faculty_name);
+                } else {
+                    // Tutorials live in tutattendance; older tutorial rows saved in
+                    // labattendance (no lab number) are included as well.
+                    $attSql = "SELECT id, date, time, batch, presentNo FROM tutattendance WHERE term = ? AND sem = ? AND subject = ? AND (faculty = ? OR faculty = ?)
+                               UNION ALL
+                               SELECT id, date, time, batch, presentNo FROM labattendance WHERE term = ? AND sem = ? AND subject = ? AND (faculty = ? OR faculty = ?) AND COALESCE(TRIM(labNo), '') = ''";
+                    $attStmt = $conn->prepare($attSql);
+                    $attStmt->bind_param('ssssssssss', $term, $sem, $subject, $faculty_id, $faculty_name, $term, $sem, $subject, $faculty_id, $faculty_name);
                 }
 
                 $attStmt->execute();
