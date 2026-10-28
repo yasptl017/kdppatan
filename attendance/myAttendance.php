@@ -561,17 +561,24 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['autofill_pending_max'
         exit();
     }
 
-    $class_students_stmt = $conn->prepare("SELECT enrollmentNo FROM students WHERE term = ? AND sem = ? AND class = ? AND enrollmentNo IS NOT NULL AND TRIM(enrollmentNo) <> ''");
-    // Two-stage source lookup:
-    //   (a) Same-class same-date attendance for the slot's date (preferred,
-    //       catches "today" attendance that another faculty already filed).
-    //   (b) Same-class attendance from the most recent PAST date within the
-    //       last 14 days (fallback when the slot's date has no source yet,
-    //       which is the typical case when filling tomorrow's slot today).
-    $lec_auto_stmt = $conn->prepare("SELECT presentNo, date FROM lecattendance WHERE term = ? AND sem = ? AND class = ? AND date <= ? ORDER BY date DESC, id DESC LIMIT 50");
-    $lab_auto_stmt = $conn->prepare("SELECT presentNo, date FROM labattendance WHERE term = ? AND sem = ? AND date <= ? AND COALESCE(TRIM(labNo), '') <> '' ORDER BY date DESC, id DESC LIMIT 50");
-    $tut_auto_stmt = $conn->prepare("SELECT presentNo, date FROM tutattendance WHERE term = ? AND sem = ? AND date <= ? ORDER BY date DESC, id DESC LIMIT 50");
-    // Three exists/insert pairs, one per attendance table
+    // ── Autofill source rules (same term + sem) ──────────────────────────────
+    //   1. Nearest EARLIER lecture/lab/tutorial on the same date.
+    //   2. Else nearest LATER lecture/lab/tutorial on the same date.
+    //   3. Else the previous day(s): the closest earlier date that has any
+    //      usable record, taking its latest lecture/lab/tutorial.
+    // A record is usable only if its own roster (class or lab/tut batch)
+    // covers every student of the slot being filled, and it has at least
+    // one present student among them.
+    $roster_stmts = [
+        'lecture'  => $conn->prepare("SELECT enrollmentNo FROM students WHERE term = ? AND sem = ? AND TRIM(class) = ? AND enrollmentNo IS NOT NULL AND TRIM(enrollmentNo) <> ''"),
+        'lab'      => $conn->prepare("SELECT enrollmentNo FROM students WHERE term = ? AND sem = ? AND UPPER(TRIM(labBatch)) = ? AND enrollmentNo IS NOT NULL AND TRIM(enrollmentNo) <> ''"),
+        'tutorial' => $conn->prepare("SELECT enrollmentNo FROM students WHERE term = ? AND sem = ? AND UPPER(TRIM(tutBatch)) = ? AND enrollmentNo IS NOT NULL AND TRIM(enrollmentNo) <> ''"),
+    ];
+    $source_stmts = [
+        'lecture'  => $conn->prepare("SELECT time, class AS grp, presentNo FROM lecattendance WHERE term = ? AND sem = ? AND date = ?"),
+        'lab'      => $conn->prepare("SELECT time, batch AS grp, presentNo FROM labattendance WHERE term = ? AND sem = ? AND date = ? AND COALESCE(TRIM(labNo), '') <> ''"),
+        'tutorial' => $conn->prepare("SELECT time, batch AS grp, presentNo FROM tutattendance WHERE term = ? AND sem = ? AND date = ?"),
+    ];
     $lec_exists = $conn->prepare("SELECT id FROM lecattendance WHERE date = ? AND time = ? AND term = ? AND sem = ? AND subject = ? AND class = ? LIMIT 1");
     $lec_insert = $conn->prepare("INSERT INTO lecattendance (date, logdate, time, term, faculty, sem, subject, class, presentNo, absentNo, description) VALUES (?, CURDATE(), ?, ?, ?, ?, ?, ?, ?, ?, ?)");
     $lab_exists = $conn->prepare("SELECT id FROM labattendance WHERE date = ? AND time = ? AND term = ? AND sem = ? AND subject = ? AND batch = ? LIMIT 1");
@@ -579,27 +586,91 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['autofill_pending_max'
     $tut_exists = $conn->prepare("SELECT id FROM tutattendance WHERE date = ? AND time = ? AND term = ? AND sem = ? AND subject = ? AND batch = ? LIMIT 1");
     $tut_insert = $conn->prepare("INSERT INTO tutattendance (date, logdate, time, term, faculty, sem, subject, batch, presentNo) VALUES (?, CURDATE(), ?, ?, ?, ?, ?, ?, ?)");
 
-    if (!$class_students_stmt || !$lec_auto_stmt || !$lab_auto_stmt || !$tut_auto_stmt || !$lec_exists || !$lec_insert || !$lab_exists || !$lab_insert || !$tut_exists || !$tut_insert) {
+    $stmt_ok = !in_array(false, array_merge(array_values($roster_stmts), array_values($source_stmts), [$lec_exists, $lec_insert, $lab_exists, $lab_insert, $tut_exists, $tut_insert]), true);
+    if (!$stmt_ok) {
         $redirect_params['err'] = 'Bulk autofill is unavailable right now. Please try again.';
         header('Location: myAttendance.php?' . http_build_query($redirect_params));
         exit();
     }
 
-    $parse_present_tokens = static function (string $csv): array {
-        $tokens = [];
-        foreach (explode(',', $csv) as $raw) {
-            $token = trim($raw);
-            if ($token !== '') {
-                $tokens[$token] = true;
+    // Roster (set of enrollment numbers) for a class / batch label (batch may be a CSV).
+    $roster_cache = [];
+    $get_roster = function (string $kind, string $term, string $sem, string $label) use (&$roster_cache, $roster_stmts): array {
+        $ck = $kind . '|' . $term . '|' . $sem . '|' . $label;
+        if (isset($roster_cache[$ck])) {
+            return $roster_cache[$ck];
+        }
+        $set = [];
+        $labels = $kind === 'lecture' ? [trim($label)] : array_map('trim', explode(',', $label));
+        foreach ($labels as $one) {
+            if ($one === '') continue;
+            $one = $kind === 'lecture' ? $one : strtoupper($one);
+            $st = $roster_stmts[$kind];
+            $st->bind_param('sss', $term, $sem, $one);
+            $st->execute();
+            $rr = $st->get_result();
+            while ($sr = $rr->fetch_assoc()) {
+                $en = trim((string)$sr['enrollmentNo']);
+                if ($en !== '') $set[$en] = true;
             }
         }
-        return array_keys($tokens);
+        return $roster_cache[$ck] = $set;
     };
 
-    $class_cache = [];
-    $best_cache = [];
-    $processed_slot_keys = [];
+    // Start time of a slot string in minutes ("1:00 - 2:00" => 13:00; hours < 7 are PM).
+    $slot_minutes = static function (string $slot): int {
+        if (!preg_match('/(\d{1,2})[:.](\d{2})/', $slot, $mm)) return -1;
+        $h = (int)$mm[1];
+        if ($h < 7) $h += 12;
+        return $h * 60 + (int)$mm[2];
+    };
 
+    // Best usable record on $date relative to $ref_min.
+    //   $mode 'before' => latest start earlier than $ref_min
+    //   $mode 'after'  => earliest start later than $ref_min
+    //   $mode 'last'   => latest start of the day
+    // Returns the present list (restricted to the target roster) or null.
+    $find_source = function (string $term, string $sem, string $date, array $target, string $mode, int $ref_min) use ($source_stmts, $get_roster, $slot_minutes): ?array {
+        $best = null;
+        $best_min = null;
+        foreach ($source_stmts as $kind => $st) {
+            $st->bind_param('sss', $term, $sem, $date);
+            $st->execute();
+            $res = $st->get_result();
+            while ($row = $res->fetch_assoc()) {
+                $m = $slot_minutes((string)$row['time']);
+                if ($m < 0) continue;
+                if ($mode === 'before' && !($m < $ref_min)) continue;
+                if ($mode === 'after' && !($m > $ref_min)) continue;
+
+                $src_roster = $get_roster($kind, $term, $sem, (string)$row['grp']);
+                if (empty($src_roster) || count(array_diff_key($target, $src_roster)) > 0) continue;
+
+                $present = [];
+                foreach (explode(',', (string)$row['presentNo']) as $tok) {
+                    $tok = trim($tok);
+                    if ($tok !== '' && isset($target[$tok])) $present[$tok] = true;
+                }
+                if (empty($present)) continue;
+
+                $better = $best === null
+                    || ($mode === 'after' ? $m < $best_min : $m > $best_min)
+                    || ($m === $best_min && count($present) > count($best));
+                if ($better) {
+                    $best = $present;
+                    $best_min = $m;
+                }
+            }
+        }
+        return $best === null ? null : array_keys($best);
+    };
+
+    // Chronological order so a slot filled earlier in this run can feed later ones.
+    usort($bulk_candidates, function ($a, $b) use ($slot_minutes) {
+        return strcmp($a['date'], $b['date']) ?: ($slot_minutes((string)$a['slot']) <=> $slot_minutes((string)$b['slot']));
+    });
+
+    $processed_slot_keys = [];
     $created = 0;
     $skipped_no_autofill = 0;
     $skipped_existing = 0;
@@ -610,15 +681,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['autofill_pending_max'
 
     foreach ($bulk_candidates as $slot) {
         $slot_type = (string)($slot['mapping_type'] ?? 'lecture');
-        $slot_key = attendance_norm_key(
-            $slot_type,
-            $slot['term'],
-            $slot['sem'],
-            $slot['subject'],
-            $slot['class'],
-            $slot['date'],
-            $slot['slot']
-        );
+        $slot_key = attendance_norm_key($slot_type, $slot['term'], $slot['sem'], $slot['subject'], $slot['class'], $slot['date'], $slot['slot']);
         if (isset($processed_slot_keys[$slot_key])) {
             $skipped_duplicate++;
             continue;
@@ -634,7 +697,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['autofill_pending_max'
         $class = (string)$slot['class'];
         $lab_no = (string)($slot['lab_no'] ?? '');
 
-        // Pick the right exists/insert based on type
         if ($slot_type === 'lecture') {
             $exists_stmt = $lec_exists;
             $insert_stmt = $lec_insert;
@@ -648,234 +710,43 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['autofill_pending_max'
 
         $exists_stmt->bind_param('ssssss', $date, $time, $term, $sem, $subject, $class);
         $exists_stmt->execute();
-        $existing_row = $exists_stmt->get_result()->fetch_assoc();
-        if ($existing_row) {
+        if ($exists_stmt->get_result()->fetch_assoc()) {
             $skipped_existing++;
             continue;
         }
 
-        $class_key = $term . '|' . $sem . '|' . $class;
-        if (!isset($class_cache[$class_key])) {
-            $class_students_stmt->bind_param('sss', $term, $sem, $class);
-            $class_students_stmt->execute();
-            $student_res = $class_students_stmt->get_result();
-            $enrollment_set = [];
-            while ($sr = $student_res->fetch_assoc()) {
-                $enrollment = trim((string)($sr['enrollmentNo'] ?? ''));
-                if ($enrollment !== '') {
-                    $enrollment_set[$enrollment] = true;
-                }
-            }
-            $class_cache[$class_key] = $enrollment_set;
-        }
-
-        $best_key = $term . '|' . $sem . '|' . $class . '|' . $date;
-        if (!isset($best_cache[$best_key])) {
-            $class_set = $class_cache[$class_key];
-            $best_present = [];
-            $best_count = 0;
-
-            $consider_present = static function (string $csv, array $class_set, callable $parser): array {
-                $tokens = $parser($csv);
-                if (empty($tokens)) {
-                    return [];
-                }
-                $filtered = [];
-                foreach ($tokens as $token) {
-                    if (isset($class_set[$token])) {
-                        $filtered[$token] = true;
-                    }
-                }
-                return array_keys($filtered);
-            };
-
-            if (!empty($class_set)) {
-                // Source-attendance lookup with explicit preference order:
-                //   1. Same-class, same-date (preferred — usually another
-                //      faculty filed today's attendance for this class).
-                //   2. Same-class, most-recent PAST date (skipping dates
-                //      that have no data — handles holidays etc. naturally
-                //      by just not having rows for that date).
-                //   3. Same-class, most-recent FUTURE date (last-resort when
-                //      the user is filling the FIRST lecture of the term
-                //      and there's no past history yet).
-                // Each row is scored by recency (lower days-apart wins)
-                // and roster size (more students is slightly better when
-                // recency is equal). Same-date rows always beat any other
-                // date regardless of roster size.
-                $slot_ts = strtotime($date);
-                $candidate_rows = [];
-                // Same-date row (highest priority).
-                $lec_auto_stmt->bind_param('ssss', $term, $sem, $class, $date);
-                $lec_auto_stmt->execute();
-                $lec_res = $lec_auto_stmt->get_result();
-                while ($row = $lec_res->fetch_assoc()) {
-                    $candidate_rows[] = $row;
-                }
-
-                $lab_auto_stmt->bind_param('sss', $term, $sem, $date);
-                $lab_auto_stmt->execute();
-                $lab_res = $lab_auto_stmt->get_result();
-                while ($row = $lab_res->fetch_assoc()) {
-                    $candidate_rows[] = $row;
-                }
-
-                $tut_auto_stmt->bind_param('sss', $term, $sem, $date);
-                $tut_auto_stmt->execute();
-                $tut_res = $tut_auto_stmt->get_result();
-                while ($row = $tut_res->fetch_assoc()) {
-                    $candidate_rows[] = $row;
-                }
-
-                // Walk-back lookup: find the most-recent past date that
-                // has any same-class attendance. Done by stepping back one
-                // day at a time (up to 30 days) and querying the same-class
-                // attendance for that day. The first non-empty result is
-                // the closest past source.
-                $walkback_rows = [];
-                $walkback_found_date = '';
-                $walk_dt = new DateTime($date);
-                for ($i = 1; $i <= 30; $i++) {
-                    $walk_dt->modify('-1 day');
-                    $walk_date = $walk_dt->format('Y-m-d');
-                    $has_any = false;
-
-                    $lec_auto_stmt->bind_param('ssss', $term, $sem, $class, $walk_date);
-                    $lec_auto_stmt->execute();
-                    $wr = $lec_auto_stmt->get_result();
-                    while ($row = $wr->fetch_assoc()) {
-                        $row['_walk_date'] = $walk_date;
-                        $walkback_rows[] = $row;
-                        $has_any = true;
-                    }
-
-                    $lab_auto_stmt->bind_param('sss', $term, $sem, $walk_date);
-                    $lab_auto_stmt->execute();
-                    $wr = $lab_auto_stmt->get_result();
-                    while ($row = $wr->fetch_assoc()) {
-                        $row['_walk_date'] = $walk_date;
-                        $walkback_rows[] = $row;
-                        $has_any = true;
-                    }
-
-                    $tut_auto_stmt->bind_param('sss', $term, $sem, $walk_date);
-                    $tut_auto_stmt->execute();
-                    $wr = $tut_auto_stmt->get_result();
-                    while ($row = $wr->fetch_assoc()) {
-                        $row['_walk_date'] = $walk_date;
-                        $walkback_rows[] = $row;
-                        $has_any = true;
-                    }
-
-                    if ($has_any) {
-                        $walkback_found_date = $walk_date;
-                        break;  // closest past date with data wins
-                    }
-                }
-
-                // Walk-forward fallback: only when no past data exists. Used
-                // for the very first lecture of the term. Step forward up
-                // to 14 days looking for a same-class entry.
-                $walkforward_rows = [];
-                $walkforward_found_date = '';
-                if (empty($walkback_rows)) {
-                    $wf_dt = new DateTime($date);
-                    for ($i = 1; $i <= 14; $i++) {
-                        $wf_dt->modify('+1 day');
-                        $wf_date = $wf_dt->format('Y-m-d');
-                        $has_any = false;
-
-                        $lec_auto_stmt->bind_param('ssss', $term, $sem, $class, $wf_date);
-                        $lec_auto_stmt->execute();
-                        $wr = $lec_auto_stmt->get_result();
-                        while ($row = $wr->fetch_assoc()) {
-                            $row['_walk_date'] = $wf_date;
-                            $walkforward_rows[] = $row;
-                            $has_any = true;
-                        }
-
-                        $lab_auto_stmt->bind_param('sss', $term, $sem, $wf_date);
-                        $lab_auto_stmt->execute();
-                        $wr = $lab_auto_stmt->get_result();
-                        while ($row = $wr->fetch_assoc()) {
-                            $row['_walk_date'] = $wf_date;
-                            $walkforward_rows[] = $row;
-                            $has_any = true;
-                        }
-
-                        $tut_auto_stmt->bind_param('sss', $term, $sem, $wf_date);
-                        $tut_auto_stmt->execute();
-                        $wr = $tut_auto_stmt->get_result();
-                        while ($row = $wr->fetch_assoc()) {
-                            $row['_walk_date'] = $wf_date;
-                            $walkforward_rows[] = $row;
-                            $has_any = true;
-                        }
-
-                        if ($has_any) {
-                            $walkforward_found_date = $wf_date;
-                            break;
-                        }
-                    }
-                }
-
-                // Combine all candidate rows and pick the best one.
-                // Tie-breaks:
-                //   - Same-date rows always win (highest priority).
-                //   - Among same-date rows, more students is better.
-                //   - For past/future rows, fewer days-apart is better;
-                //     ties broken by larger roster.
-                $winning_date = '';
-                $rank_candidate = static function (array $row) use (&$best_present, &$best_count, &$winning_date, $class_set, $parse_present_tokens, $consider_present, $slot_ts, $date) {
-                    $present = $consider_present((string)($row['presentNo'] ?? ''), $class_set, $parse_present_tokens);
-                    if (empty($present)) {
-                        return;
-                    }
-                    $row_date = (string)($row['_walk_date'] ?? $row['date'] ?? '');
-                    $row_ts = strtotime($row_date);
-                    $days_apart = (int)(abs($row_ts - $slot_ts) / 86400);
-                    $same_day_bonus = ($row_ts === $slot_ts) ? 1_000_000 : 0;
-                    $recency_bonus  = max(0, 200 - $days_apart);
-                    $score = (count($present) * 100) + $same_day_bonus + $recency_bonus;
-                    if ($score > $best_count) {
-                        $best_count = $score;
-                        $best_present = $present;
-                        $winning_date = $row_date;
-                    }
-                };
-
-                foreach ($candidate_rows as $row) {
-                    $rank_candidate($row);
-                }
-                foreach ($walkback_rows as $row) {
-                    $rank_candidate($row);
-                }
-                foreach ($walkforward_rows as $row) {
-                    $rank_candidate($row);
-                }
-
-                // Remember the source date this slot used so we can surface
-                // it in the redirect message.
-                if ($winning_date !== '' && $winning_date !== $date) {
-                    $source_dates_used[$slot_key] = $winning_date;
-                }
-            }
-
-            $best_cache[$best_key] = $best_present;
-        }
-
-        $present_list = $best_cache[$best_key];
-        if (empty($present_list)) {
+        $class_set = $get_roster($slot_type, $term, $sem, $class);
+        if (empty($class_set)) {
             $skipped_no_autofill++;
             continue;
         }
 
-        $class_set = $class_cache[$class_key];
-        $present_set = [];
-        foreach ($present_list as $enrollment_no) {
-            $present_set[$enrollment_no] = true;
+        $ref_min = $slot_minutes($time);
+        $present_list = null;
+        $source_date = $date;
+        if ($ref_min >= 0) {
+            $present_list = $find_source($term, $sem, $date, $class_set, 'before', $ref_min);   // rule 1
+            if ($present_list === null) {
+                $present_list = $find_source($term, $sem, $date, $class_set, 'after', $ref_min); // rule 2
+            }
+        }
+        if ($present_list === null) {                                                            // rule 3
+            $walk_dt = new DateTime($date);
+            for ($i = 1; $i <= 30 && $present_list === null; $i++) {
+                $walk_dt->modify('-1 day');
+                $present_list = $find_source($term, $sem, $walk_dt->format('Y-m-d'), $class_set, 'last', 0);
+                $source_date = $walk_dt->format('Y-m-d');
+            }
+        }
+        if ($present_list === null) {
+            $skipped_no_autofill++;
+            continue;
+        }
+        if ($source_date !== $date) {
+            $source_dates_used[$slot_key] = $source_date;
         }
 
+        $present_set = array_flip($present_list);
         $absent_list = [];
         foreach ($class_set as $enrollment_no => $_exists) {
             if (!isset($present_set[$enrollment_no])) {
@@ -890,10 +761,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['autofill_pending_max'
             $description = null;
             $insert_stmt->bind_param('ssssssssss', $date, $time, $term, $faculty, $sem, $subject, $class, $present_csv, $absent_csv, $description);
         } elseif ($slot_type === 'lab') {
-            // Lab attendance columns: date, logdate, time, term, faculty, sem, subject, batch, presentNo, labNo
             $insert_stmt->bind_param('sssssssss', $date, $time, $term, $faculty, $sem, $subject, $class, $present_csv, $lab_no);
         } else {
-            // Tutorial: date, logdate, time, term, faculty, sem, subject, batch, presentNo
             $insert_stmt->bind_param('ssssssss', $date, $time, $term, $faculty, $sem, $subject, $class, $present_csv);
         }
 
@@ -902,21 +771,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['autofill_pending_max'
         } else {
             $failed++;
             if ($first_failure_reason === '') {
-                $first_failure_reason = sprintf(
-                    '[%s] %s on %s — %s',
-                    $slot_type,
-                    $subject,
-                    $date,
-                    $conn->error ?: 'unknown error'
-                );
+                $first_failure_reason = sprintf('[%s] %s on %s — %s', $slot_type, $subject, $date, $conn->error ?: 'unknown error');
             }
         }
     }
 
-    $class_students_stmt->close();
-    $lec_auto_stmt->close();
-    $lab_auto_stmt->close();
-    $tut_auto_stmt->close();
+    foreach (array_merge(array_values($roster_stmts), array_values($source_stmts)) as $st) {
+        $st->close();
+    }
     $lec_exists->close();
     $lec_insert->close();
     $lab_exists->close();
