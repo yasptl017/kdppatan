@@ -199,23 +199,26 @@ if (!empty($slot_list)) {
     $types = 's' . str_repeat('s', count($unique_sems));
     foreach (['lecattendance|lecture|class', 'labattendance|lab|batch', 'tutattendance|tutorial|batch'] as $spec) {
         [$table, $type, $col] = explode('|', $spec);
-        $att_stmt = $conn->prepare("SELECT date, time, term, sem, subject, {$col} FROM {$table} WHERE term = ? AND sem IN ($sp)");
+        $att_stmt = $conn->prepare("SELECT date, time, term, sem, subject, presentNo, {$col} FROM {$table} WHERE term = ? AND sem IN ($sp)");
         if (!$att_stmt) continue;
         $att_stmt->bind_param($types, ...array_merge([$filter_term], $unique_sems));
         $att_stmt->execute();
         $att_res = $att_stmt->get_result();
         while ($ar = $att_res->fetch_assoc()) {
-            $filled_lookup[attendance_norm_key($type, $ar['term'], $ar['sem'], $ar['subject'], $ar[$col], $ar['date'], $ar['time'])] = true;
-            $filled_lookup[attendance_loose_key($type, $ar['term'], $ar['sem'], $ar['subject'], $ar[$col], $ar['date'], $ar['time'])] = true;
+            // 'A' = saved with no student present (all absent), 'P' = at least one present
+            $flag = trim((string)$ar['presentNo']) === '' ? 'A' : 'P';
+            $filled_lookup[attendance_norm_key($type, $ar['term'], $ar['sem'], $ar['subject'], $ar[$col], $ar['date'], $ar['time'])] = $flag;
+            $filled_lookup[attendance_loose_key($type, $ar['term'], $ar['sem'], $ar['subject'], $ar[$col], $ar['date'], $ar['time'])] = $flag;
         }
         $att_stmt->close();
     }
 }
 
 // ── Classify slots and aggregate ─────────────────────────────────────────────
-// Precedence: taken > holiday > cancelled > upcoming > absent
+// Precedence: taken > holiday > cancelled > upcoming > pending
+// Taken = attendance entered (some present + all absent). Absent = the taken slots where every student was absent.
 $type_labels = ['lecture' => 'Lecture', 'lab' => 'Lab', 'tutorial' => 'Tutorial'];
-$zero = ['planned' => 0, 'taken' => 0, 'absent' => 0, 'holiday' => 0, 'cancelled' => 0, 'upcoming' => 0];
+$zero = ['planned' => 0, 'taken' => 0, 'absent' => 0, 'pending' => 0, 'holiday' => 0, 'cancelled' => 0, 'upcoming' => 0];
 $rows = [];
 $totals = [];
 foreach ($type_labels as $k => $_) $totals[$k] = $zero;
@@ -223,13 +226,16 @@ $grand = $zero;
 $absent_slots = [];
 
 foreach ($slot_list as $s) {
-    $filled = isset($filled_lookup[attendance_norm_key($s['mapping_type'], $s['term'], $s['sem'], $s['subject'], $s['class'], $s['date'], $s['slot'])])
-           || isset($filled_lookup[attendance_loose_key($s['mapping_type'], $s['term'], $s['sem'], $s['subject'], $s['class'], $s['date'], $s['slot'])]);
+    $flag = $filled_lookup[attendance_norm_key($s['mapping_type'], $s['term'], $s['sem'], $s['subject'], $s['class'], $s['date'], $s['slot'])]
+         ?? $filled_lookup[attendance_loose_key($s['mapping_type'], $s['term'], $s['sem'], $s['subject'], $s['class'], $s['date'], $s['slot'])]
+         ?? null;
+    $filled = $flag !== null;
+    $all_absent = $flag === 'A';
     if ($filled)                     $status = 'taken';
     elseif ($s['holiday'] !== null)  $status = 'holiday';
     elseif ($s['skipped'])           $status = 'cancelled';
     elseif ($s['date'] > $today_str) $status = 'upcoming';
-    else                             $status = 'absent';
+    else                             $status = 'pending';
 
     $key = $s['mapping_type'] . '|' . $s['sem'] . '|' . $s['subject'] . '|' . $s['class'];
     if (!isset($rows[$key])) {
@@ -238,10 +244,11 @@ foreach ($slot_list as $s) {
     foreach ([&$rows[$key], &$totals[$s['mapping_type']], &$grand] as &$bucket) {
         $bucket['planned']++;
         $bucket[$status]++;
+        if ($all_absent) $bucket['absent']++;
     }
     unset($bucket);
 
-    if ($status === 'absent') $absent_slots[] = $s;
+    if ($all_absent) $absent_slots[] = $s;
 }
 
 usort($rows, function ($a, $b) {
@@ -289,8 +296,9 @@ usort($absent_slots, fn($a, $b) => strcmp($b['date'], $a['date']));
                         </div>
                     </form>
                     <div class="text-muted small mt-2">
-                        Planned = all scheduled slots from your mappings. Absent = past slots with no attendance entered
-                        (excluding holidays and cancelled slots). Up to <?= $today->format('d M Y') ?>.
+                        Planned = all scheduled slots from your mappings. Taken = attendance entered (some present + all absent).
+                        Absent = taken slots where every student was absent (included in Taken). Pending = past slots with no
+                        attendance entered (excluding holidays and cancelled slots). Up to <?= $today->format('d M Y') ?>.
                     </div>
                 </div>
             </div>
@@ -306,7 +314,7 @@ usort($absent_slots, fn($a, $b) => strcmp($b['date'], $a['date']));
                                 <thead class="table-light">
                                     <tr>
                                         <th>Type</th><th>Sem</th><th>Subject</th><th>Class / Batch</th>
-                                        <th>Planned</th><th>Taken</th><th>Absent</th><th>Holiday</th><th>Cancelled</th><th>Upcoming</th>
+                                        <th>Planned</th><th>Taken</th><th>Absent</th><th>Pending</th><th>Holiday</th><th>Cancelled</th><th>Upcoming</th>
                                     </tr>
                                 </thead>
                                 <tbody>
@@ -319,6 +327,7 @@ usort($absent_slots, fn($a, $b) => strcmp($b['date'], $a['date']));
                                             <td><?= $r['planned'] ?></td>
                                             <td class="num-taken"><?= $r['taken'] ?></td>
                                             <td class="<?= $r['absent'] ? 'num-absent' : '' ?>"><?= $r['absent'] ?></td>
+                                            <td><?= $r['pending'] ?></td>
                                             <td class="<?= $r['holiday'] ? 'num-holiday' : '' ?>"><?= $r['holiday'] ?></td>
                                             <td><?= $r['cancelled'] ?></td>
                                             <td><?= $r['upcoming'] ?></td>
@@ -329,13 +338,13 @@ usort($absent_slots, fn($a, $b) => strcmp($b['date'], $a['date']));
                                     <?php foreach ($type_labels as $tk => $tl): if ($totals[$tk]['planned'] === 0) continue; $tt = $totals[$tk]; ?>
                                         <tr>
                                             <td colspan="4">Total <?= $tl ?></td>
-                                            <td><?= $tt['planned'] ?></td><td><?= $tt['taken'] ?></td><td><?= $tt['absent'] ?></td>
+                                            <td><?= $tt['planned'] ?></td><td><?= $tt['taken'] ?></td><td><?= $tt['absent'] ?></td><td><?= $tt['pending'] ?></td>
                                             <td><?= $tt['holiday'] ?></td><td><?= $tt['cancelled'] ?></td><td><?= $tt['upcoming'] ?></td>
                                         </tr>
                                     <?php endforeach; ?>
                                     <tr>
                                         <td colspan="4">Grand Total</td>
-                                        <td><?= $grand['planned'] ?></td><td><?= $grand['taken'] ?></td><td><?= $grand['absent'] ?></td>
+                                        <td><?= $grand['planned'] ?></td><td><?= $grand['taken'] ?></td><td><?= $grand['absent'] ?></td><td><?= $grand['pending'] ?></td>
                                         <td><?= $grand['holiday'] ?></td><td><?= $grand['cancelled'] ?></td><td><?= $grand['upcoming'] ?></td>
                                     </tr>
                                 </tfoot>
@@ -348,7 +357,7 @@ usort($absent_slots, fn($a, $b) => strcmp($b['date'], $a['date']));
                     <div class="app-card-body">
                         <h5 class="mb-3">Absent Slots <span class="badge bg-danger"><?= count($absent_slots) ?></span></h5>
                         <?php if (empty($absent_slots)): ?>
-                            <div class="text-muted">No absent slots. All past slots have attendance entered.</div>
+                            <div class="text-muted">No all-absent slots.</div>
                         <?php else: ?>
                             <div class="table-responsive">
                                 <table class="table table-sm table-bordered plan-table mb-0">
