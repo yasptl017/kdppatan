@@ -153,25 +153,35 @@ function safe_sheet_title($baseTitle, array &$usedTitles) {
     return $candidate;
 }
 
-function write_muster_section($sheet, $students, $sessions, $term, $sem, $batch, $subjectDisplay, $startRow, $facultyDisplay = '') {
+function write_muster_section($sheet, $students, $sessions, $term, $sem, $batch, $subjectDisplay, $startRow, $facultyDisplay = '', $attendanceType = 'lecture') {
     $totalCols = max(3, 3 + count($sessions));
     $lastCol = Coordinate::stringFromColumnIndex($totalCols);
 
     $titleRow = $startRow;
     $deptRow = $startRow + 1;
-    $metaRow1 = $startRow + 2;
-    $metaRow2 = $startRow + 3;
-    $metaRow3 = $startRow + 4;
-    $headerRow = $startRow + 5;
+    $typeRow = $startRow + 2;
+    $metaRow1 = $startRow + 3;
+    $metaRow2 = $startRow + 4;
+    $metaRow3 = $startRow + 5;
+    $headerRow = $startRow + 6;
 
     $facultyLabel = trim($facultyDisplay) !== '' ? $facultyDisplay : '__________________________';
+    $typeLabels = ['lecture' => 'LECTURE MUSTER', 'lab' => 'LAB MUSTER', 'tutorial' => 'TUTORIAL MUSTER'];
+    $typeHeading = $typeLabels[$attendanceType] ?? 'MUSTER';
+    // Faculty name is shown on lecture musters only.
+    $subjectLine = 'Subject Name (Subject Code): ' . $subjectDisplay;
+    if ($attendanceType === 'lecture') {
+        $subjectLine = 'Faculty Name: ' . $facultyLabel . '    ' . $subjectLine;
+    }
 
     $sheet->mergeCells("A{$titleRow}:{$lastCol}{$titleRow}");
     $sheet->setCellValue("A{$titleRow}", 'K. D. POLYTECHNIC, PATAN');
     $sheet->mergeCells("A{$deptRow}:{$lastCol}{$deptRow}");
     $sheet->setCellValue("A{$deptRow}", 'Department of Computer Engineering');
+    $sheet->mergeCells("A{$typeRow}:{$lastCol}{$typeRow}");
+    $sheet->setCellValue("A{$typeRow}", $typeHeading);
     $sheet->mergeCells("A{$metaRow1}:{$lastCol}{$metaRow1}");
-    $sheet->setCellValue("A{$metaRow1}", 'Faculty Name: ' . $facultyLabel . '    Subject Name (Subject Code): ' . $subjectDisplay);
+    $sheet->setCellValue("A{$metaRow1}", $subjectLine);
     $sheet->mergeCells("A{$metaRow2}:{$lastCol}{$metaRow2}");
     $sheet->setCellValue("A{$metaRow2}", 'Term: ' . $term . '    W.E.F.: ____________________');
     $sheet->mergeCells("A{$metaRow3}:{$lastCol}{$metaRow3}");
@@ -208,6 +218,7 @@ function write_muster_section($sheet, $students, $sessions, $term, $sem, $batch,
     $sheet->getStyle("A{$titleRow}:{$lastCol}{$metaRow3}")->getAlignment()->setVertical(Alignment::VERTICAL_CENTER);
     $sheet->getStyle("A{$titleRow}")->getFont()->setBold(true)->setSize(14);
     $sheet->getStyle("A{$deptRow}")->getFont()->setBold(true)->setSize(12);
+    $sheet->getStyle("A{$typeRow}")->getFont()->setBold(true)->setSize(13);
     $sheet->getStyle("A{$metaRow1}:{$lastCol}{$metaRow3}")->getFont()->setBold(true);
     $sheet->getStyle("A{$titleRow}:{$lastCol}{$metaRow3}")->getBorders()->getAllBorders()->setBorderStyle(Border::BORDER_THIN);
 
@@ -722,7 +733,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && strtolower(trim((string)($_POST['re
                             $batchName,
                             $subjectDisplay,
                             $nextRow,
-                            $faculty_name
+                            $faculty_name,
+                            $attendance_type
                         );
                     }
 
