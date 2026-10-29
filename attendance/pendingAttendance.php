@@ -144,6 +144,7 @@ foreach ($ids_by_type as $exc_type => $exc_id_map) {
 // ── Expand mappings into slots ───────────────────────────────────────────────
 // Active holidays are non-teaching days, so their dates are skipped entirely.
 $holiday_dates = attendance_holiday_dates($conn);
+$midsem_ranges = attendance_midsem_ranges($conn);
 $slot_list = [];
 $today = new DateTime('today');
 
@@ -168,6 +169,8 @@ foreach ($mappings_rows as $m) {
         if (in_array($dow, $repeat_days, true)) {
             $date_str = $cur->format('Y-m-d');
             if (isset($holiday_dates[$date_str])) { $cur->modify('+1 day'); continue; }
+            // Midsem exam period (highlight or hide mode): not pending.
+            if (attendance_midsem_mode($midsem_ranges, trim((string)$m['term']), (string)$m['sem'], $date_str) !== '') { $cur->modify('+1 day'); continue; }
             $dow_str  = (string)$dow;
 
             $slot_value = $parsed_slots !== null
