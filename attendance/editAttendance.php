@@ -19,15 +19,17 @@ $error_msg   = trim((string)($_GET['error'] ?? ''));
 
 // Resolve logged-in faculty ID from session username
 $logged_in_faculty_id = 0;
+$logged_in_faculty_name = '';
 $session_username = trim((string)($_SESSION['username'] ?? ''));
 if ($session_username !== '') {
-    $facLookup = $conn->prepare("SELECT id FROM faculty WHERE username = ? LIMIT 1");
+    $facLookup = $conn->prepare("SELECT id, Name FROM faculty WHERE username = ? LIMIT 1");
     if ($facLookup) {
         $facLookup->bind_param('s', $session_username);
         $facLookup->execute();
         $facRow = $facLookup->get_result()->fetch_assoc();
         if ($facRow) {
             $logged_in_faculty_id = (int)$facRow['id'];
+            $logged_in_faculty_name = trim((string)$facRow['Name']);
         }
         $facLookup->close();
     }
@@ -64,8 +66,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['delete_attendance']))
 
     $table = $table_map[$delete_type];
     // Verify ownership before deleting
-    $stmt  = $conn->prepare("DELETE FROM {$table} WHERE id = ? AND faculty = ?");
-    $stmt->bind_param('ii', $delete_id, $logged_in_faculty_id);
+    $del_fac_id = (string)$logged_in_faculty_id;
+    $del_fac_name = $logged_in_faculty_name !== '' ? $logged_in_faculty_name : $del_fac_id;
+    $stmt  = $conn->prepare("DELETE FROM {$table} WHERE id = ? AND (faculty = ? OR faculty = ?)");
+    $stmt->bind_param('iss', $delete_id, $del_fac_id, $del_fac_name);
     $ok = $stmt->execute();
     $affected = $stmt->affected_rows;
     $stmt->close();
@@ -79,61 +83,55 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['delete_attendance']))
     exit();
 }
 
-// Build query — always restrict to logged-in faculty's records
-if ($type === 'lecture') {
-    $where  = ['faculty = ?'];
-    $params = [$logged_in_faculty_id];
-    $types  = 'i';
-    if ($filter_term !== '')    { $where[] = 'term = ?';    $params[] = $filter_term;    $types .= 's'; }
-    if ($filter_sem !== '')     { $where[] = 'sem = ?';     $params[] = $filter_sem;     $types .= 's'; }
-    if ($filter_subject !== '') { $where[] = 'subject = ?'; $params[] = $filter_subject; $types .= 's'; }
-    if ($filter_date !== '')    { $where[] = 'date = ?';    $params[] = $filter_date;    $types .= 's'; }
+// Build query — always restrict to logged-in faculty's records.
+// Older rows may store the faculty NAME instead of the id, so match both.
+$table_for = ['lecture' => 'lecattendance', 'lab' => 'labattendance', 'tutorial' => 'tutattendance'];
+$table = $table_for[$type];
+$group_col = $type === 'lecture' ? 'class' : 'batch';
+$extra_cols = $type === 'lab' ? ', labNo' : '';
 
-    $sql  = "SELECT id, date, time, term, faculty, sem, subject, class, presentNo FROM lecattendance WHERE " . implode(' AND ', $where) . " ORDER BY date DESC, id DESC";
-    $stmt = $conn->prepare($sql);
-    if (!empty($params)) {
-        $stmt->bind_param($types, ...$params);
-    }
-    $stmt->execute();
-    $records = $stmt->get_result();
-    $stmt->close();
-} elseif ($type === 'tutorial') {
-    // Tutorial uses its own tutattendance table
-    $where  = ['faculty = ?'];
-    $params = [$logged_in_faculty_id];
-    $types  = 'i';
-    if ($filter_term !== '')    { $where[] = 'term = ?';    $params[] = $filter_term;    $types .= 's'; }
-    if ($filter_sem !== '')     { $where[] = 'sem = ?';     $params[] = $filter_sem;     $types .= 's'; }
-    if ($filter_subject !== '') { $where[] = 'subject = ?'; $params[] = $filter_subject; $types .= 's'; }
-    if ($filter_date !== '')    { $where[] = 'date = ?';    $params[] = $filter_date;    $types .= 's'; }
-
-    $sql  = "SELECT id, date, time, term, faculty, sem, subject, batch, presentNo FROM tutattendance WHERE " . implode(' AND ', $where) . " ORDER BY date DESC, id DESC";
-    $stmt = $conn->prepare($sql);
-    if (!empty($params)) {
-        $stmt->bind_param($types, ...$params);
-    }
-    $stmt->execute();
-    $records = $stmt->get_result();
-    $stmt->close();
-} else {
-    // lab uses labattendance (with labNo present)
-    $where  = ['faculty = ?', "labNo IS NOT NULL AND labNo != ''"];
-    $params = [$logged_in_faculty_id];
-    $types  = 'i';
-    if ($filter_term !== '')    { $where[] = 'term = ?';    $params[] = $filter_term;    $types .= 's'; }
-    if ($filter_sem !== '')     { $where[] = 'sem = ?';     $params[] = $filter_sem;     $types .= 's'; }
-    if ($filter_subject !== '') { $where[] = 'subject = ?'; $params[] = $filter_subject; $types .= 's'; }
-    if ($filter_date !== '')    { $where[] = 'date = ?';    $params[] = $filter_date;    $types .= 's'; }
-
-    $sql  = "SELECT id, date, time, term, faculty, sem, subject, batch, labNo, presentNo FROM labattendance WHERE " . implode(' AND ', $where) . " ORDER BY date DESC, id DESC";
-    $stmt = $conn->prepare($sql);
-    if (!empty($params)) {
-        $stmt->bind_param($types, ...$params);
-    }
-    $stmt->execute();
-    $records = $stmt->get_result();
-    $stmt->close();
+$fac_id_str = (string)$logged_in_faculty_id;
+$base_where = ['(faculty = ? OR faculty = ?)'];
+$base_params = [$fac_id_str, $logged_in_faculty_name !== '' ? $logged_in_faculty_name : $fac_id_str];
+$base_types = 'ss';
+if ($type === 'lab') {
+    // lab uses labattendance rows that have a lab number (rows without one are tutorials)
+    $base_where[] = "COALESCE(TRIM(labNo), '') <> ''";
 }
+
+// Filter dropdown options, built from this faculty's own records
+$opt_term = $opt_sem = $opt_subject = [];
+$opt_stmt = $conn->prepare("SELECT DISTINCT term, sem, subject FROM {$table} WHERE " . implode(' AND ', $base_where));
+$opt_stmt->bind_param($base_types, ...$base_params);
+$opt_stmt->execute();
+$opt_res = $opt_stmt->get_result();
+while ($o = $opt_res->fetch_assoc()) {
+    $opt_term[(string)$o['term']] = true;
+    $opt_sem[(string)$o['sem']] = true;
+    $opt_subject[(string)$o['subject']] = true;
+}
+$opt_stmt->close();
+$opt_term = array_keys($opt_term);
+$opt_sem = array_keys($opt_sem);
+$opt_subject = array_keys($opt_subject);
+usort($opt_term, fn($x, $y) => strnatcmp($y, $x));
+usort($opt_sem, 'strnatcmp');
+usort($opt_subject, 'strnatcasecmp');
+
+$where = $base_where;
+$params = $base_params;
+$types = $base_types;
+if ($filter_term !== '')    { $where[] = 'term = ?';    $params[] = $filter_term;    $types .= 's'; }
+if ($filter_sem !== '')     { $where[] = 'sem = ?';     $params[] = $filter_sem;     $types .= 's'; }
+if ($filter_subject !== '') { $where[] = 'subject = ?'; $params[] = $filter_subject; $types .= 's'; }
+if ($filter_date !== '')    { $where[] = 'date = ?';    $params[] = $filter_date;    $types .= 's'; }
+
+$sql  = "SELECT id, date, time, term, faculty, sem, subject, {$group_col}{$extra_cols}, presentNo FROM {$table} WHERE " . implode(' AND ', $where) . " ORDER BY date DESC, time DESC, id DESC";
+$stmt = $conn->prepare($sql);
+$stmt->bind_param($types, ...$params);
+$stmt->execute();
+$records = $stmt->get_result();
+$stmt->close();
 
 // Faculty lookup map
 $faculty_map = [];
@@ -188,21 +186,36 @@ $edit_page = ['lecture' => 'editlecatt.php', 'lab' => 'editlabatt.php', 'tutoria
                         <input type="hidden" name="type" value="<?= htmlspecialchars($type) ?>">
                         <div class="col-6 col-md-2">
                             <label class="form-label form-label-sm mb-1">Term</label>
-                            <input type="text" name="term" class="form-control form-control-sm" value="<?= htmlspecialchars($filter_term) ?>" placeholder="e.g. 2024-25">
+                            <select name="term" class="form-control form-control-sm">
+                                <option value="">All</option>
+                                <?php foreach ($opt_term as $opt): ?>
+                                    <option value="<?= htmlspecialchars($opt) ?>" <?= $opt === $filter_term ? 'selected' : '' ?>><?= htmlspecialchars($opt) ?></option>
+                                <?php endforeach; ?>
+                            </select>
                         </div>
                         <div class="col-6 col-md-2">
                             <label class="form-label form-label-sm mb-1">Semester</label>
-                            <input type="text" name="sem" class="form-control form-control-sm" value="<?= htmlspecialchars($filter_sem) ?>" placeholder="e.g. 3">
-                        </div>
-                        <div class="col-6 col-md-2">
-                            <label class="form-label form-label-sm mb-1">Subject</label>
-                            <input type="text" name="subject" class="form-control form-control-sm" value="<?= htmlspecialchars($filter_subject) ?>" placeholder="Subject code">
+                            <select name="sem" class="form-control form-control-sm">
+                                <option value="">All</option>
+                                <?php foreach ($opt_sem as $opt): ?>
+                                    <option value="<?= htmlspecialchars($opt) ?>" <?= $opt === $filter_sem ? 'selected' : '' ?>><?= htmlspecialchars($opt) ?></option>
+                                <?php endforeach; ?>
+                            </select>
                         </div>
                         <div class="col-6 col-md-3">
+                            <label class="form-label form-label-sm mb-1">Subject</label>
+                            <select name="subject" class="form-control form-control-sm">
+                                <option value="">All</option>
+                                <?php foreach ($opt_subject as $opt): ?>
+                                    <option value="<?= htmlspecialchars($opt) ?>" <?= $opt === $filter_subject ? 'selected' : '' ?>><?= htmlspecialchars($opt) ?></option>
+                                <?php endforeach; ?>
+                            </select>
+                        </div>
+                        <div class="col-6 col-md-2">
                             <label class="form-label form-label-sm mb-1">Date</label>
                             <input type="date" name="date" class="form-control form-control-sm" value="<?= htmlspecialchars($filter_date) ?>">
                         </div>
-                        <div class="col-6 col-md-3 d-flex gap-1">
+                        <div class="col-12 col-md-3 d-flex gap-1">
                             <button type="submit" class="btn btn-primary btn-sm flex-fill">
                                 <i class="bi bi-search me-1"></i>Filter
                             </button>
@@ -245,7 +258,7 @@ $edit_page = ['lecture' => 'editlecatt.php', 'lab' => 'editlabatt.php', 'tutoria
                                     <?php $i = 1; while ($row = $records->fetch_assoc()): ?>
                                         <?php
                                         $fac_name    = $faculty_map[(string)$row['faculty']] ?? $row['faculty'];
-                                        $present_cnt = $row['presentNo'] !== '' ? count(array_filter(array_map('trim', explode(',', $row['presentNo'])))) : 0;
+                                        $present_cnt = count(array_filter(array_map('trim', explode(',', (string)$row['presentNo']))));
                                         ?>
                                         <tr>
                                             <td><?= $i++ ?></td>
@@ -256,9 +269,9 @@ $edit_page = ['lecture' => 'editlecatt.php', 'lab' => 'editlabatt.php', 'tutoria
                                             <td><?= htmlspecialchars($row['sem']) ?></td>
                                             <td><?= htmlspecialchars($row['subject']) ?></td>
                                             <?php if ($type === 'lecture'): ?>
-                                                <td><?= htmlspecialchars($row['class']) ?></td>
+                                                <td><?= htmlspecialchars($row[$group_col]) ?></td>
                                             <?php else: ?>
-                                                <td><?= htmlspecialchars($row['batch']) ?></td>
+                                                <td><?= htmlspecialchars($row[$group_col]) ?></td>
                                             <?php endif; ?>
                                             <td><span class="badge bg-success"><?= $present_cnt ?></span></td>
                                             <td>
