@@ -113,6 +113,44 @@ if (!$students_result) {
 $students_list  = $students_result ? $students_result->fetch_all(MYSQLI_ASSOC) : [];
 $students_list  = attendance_sort_students_naturally($students_list, "enrollmentNo", "name", "tutBatch");
 $total_students = count($students_list);
+
+// ── Suggestions: attendance already taken on the same date ───────────────────
+// Lecture / lab / tutorial records of the same term + sem + date, limited to the
+// students of this tutorial's batch(es). Clicking one marks those students present.
+$tut_enrollments = [];
+foreach ($students_list as $stu_row) {
+    $tut_enrollments[] = (string)(!empty($stu_row['enrollmentNo']) ? $stu_row['enrollmentNo'] : $stu_row['id']);
+}
+$suggestions = [];
+$suggestion_specs = [
+    ['Lecture',  "SELECT id, subject, class AS grp, time, presentNo FROM lecattendance WHERE term = ? AND sem = ? AND date = ? ORDER BY time, id", 'Class'],
+    ['Lab',      "SELECT id, subject, batch AS grp, time, presentNo FROM labattendance WHERE term = ? AND sem = ? AND date = ? AND COALESCE(TRIM(labNo), '') <> '' ORDER BY time, id", 'Batch'],
+    ['Tutorial', "SELECT id, subject, batch AS grp, time, presentNo FROM tutattendance WHERE term = ? AND sem = ? AND date = ? AND id <> ? ORDER BY time, id", 'Batch'],
+];
+if (!empty($tut_enrollments)) {
+    foreach ($suggestion_specs as [$sug_type, $sug_sql, $grp_label]) {
+        $sug_stmt = $conn->prepare($sug_sql);
+        if (!$sug_stmt) continue;
+        if ($sug_type === 'Tutorial') {
+            $sug_stmt->bind_param('sssi', $record['term'], $record['sem'], $record['date'], $id);
+        } else {
+            $sug_stmt->bind_param('sss', $record['term'], $record['sem'], $record['date']);
+        }
+        $sug_stmt->execute();
+        $sug_res = $sug_stmt->get_result();
+        while ($sug = $sug_res->fetch_assoc()) {
+            $all_present = array_filter(array_map('trim', explode(',', (string)$sug['presentNo'])));
+            $filtered = array_values(array_intersect($all_present, $tut_enrollments));
+            if (empty($filtered)) continue;
+            $suggestions[] = [
+                'type' => $sug_type,
+                'label' => $sug_type . ' - ' . $sug['subject'] . ' - ' . $grp_label . ' ' . $sug['grp'] . ' - ' . $sug['time'],
+                'present' => $filtered,
+            ];
+        }
+        $sug_stmt->close();
+    }
+}
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -173,6 +211,32 @@ $total_students = count($students_list);
                     </div>
                 </div>
             </div>
+
+            <!-- Same-day suggestions -->
+            <?php if (!empty($suggestions)): ?>
+            <div class="app-card shadow-sm mb-3" style="border: 2px solid #ffc107; border-left: 5px solid #ffc107;">
+                <div class="app-card-body">
+                    <h5 class="mb-2"><i class="bi bi-lightning-charge-fill text-warning me-1"></i>Same Day Attendance - Click to Mark Present</h5>
+                    <p class="text-muted mb-2" style="font-size:0.82rem;">Only students in tutorial batch(es) <strong><?= htmlspecialchars(implode(', ', $selected_tut_batches)) ?></strong> will be marked. Already-marked students stay marked.</p>
+                    <div class="d-flex flex-wrap gap-2">
+                        <?php
+                        $badge_colors = ['Lecture' => 'primary', 'Lab' => 'danger', 'Tutorial' => 'success'];
+                        foreach ($suggestions as $rec):
+                            $color = $badge_colors[$rec['type']] ?? 'secondary';
+                        ?>
+                        <button type="button"
+                                class="btn btn-outline-<?= $color ?> btn-sm autofill-btn"
+                                style="border-width: 2px; font-weight: 500;"
+                                data-present="<?= htmlspecialchars(json_encode($rec['present'])) ?>"
+                                title="<?= htmlspecialchars($rec['label']) ?> (<?= count($rec['present']) ?> students from these batches)">
+                            <?= htmlspecialchars($rec['label']) ?>
+                            <span class="badge bg-<?= $color ?> ms-1"><?= count($rec['present']) ?></span>
+                        </button>
+                        <?php endforeach; ?>
+                    </div>
+                </div>
+            </div>
+            <?php endif; ?>
 
             <!-- Edit Attendance Form -->
             <form method="POST" action="edittutatt.php?id=<?= $id ?>">
@@ -271,6 +335,21 @@ $total_students = count($students_list);
             card.classList.remove('bg-success-subtle', 'border-success');
         });
         updateCount();
+    });
+
+    // Suggestion buttons: mark the suggested students present
+    document.querySelectorAll('.autofill-btn').forEach(function (btn) {
+        btn.addEventListener('click', function () {
+            const presentSet = new Set(JSON.parse(this.dataset.present));
+            cards.forEach(function (card) {
+                const cb = card.querySelector('.attendance-checkbox');
+                if (presentSet.has(cb.value)) {
+                    cb.checked = true;
+                    card.classList.add('bg-success-subtle', 'border-success');
+                }
+            });
+            updateCount();
+        });
     });
 
     updateCount();
