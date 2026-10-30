@@ -162,6 +162,54 @@ $students_list  = $students_result ? $students_result->fetch_all(MYSQLI_ASSOC) :
 $students_list  = attendance_sort_students_naturally($students_list);
 $total_students = count($students_list);
 
+// ── Attendance % per student for this subject (same as the take-attendance pages) ──
+$subject_att_pct = [];
+if ($total_students > 0) {
+    $pct_enr_batch = [];
+    $pct_id_to_enr = [];
+    foreach ($students_list as $pct_stu) {
+        $pct_enr = trim((string)($pct_stu['enrollmentNo'] ?? ''));
+        if ($pct_enr === '') continue;
+        $pct_enr_batch[$pct_enr] = strtoupper(str_replace(' ', '', (string)($pct_stu['class'] ?? '')));
+        $pct_id_to_enr[(string)$pct_stu['id']] = $pct_enr;
+    }
+    $pct_stmt = $conn->prepare("SELECT presentNo FROM lecattendance WHERE term = ? AND sem = ? AND class = ? AND subject = ?");
+    if ($pct_stmt) {
+        $pct_stmt->bind_param('ssss', $record['term'], $record['sem'], $record['class'], $record['subject']);
+        $pct_stmt->execute();
+        $pct_res = $pct_stmt->get_result();
+        $pct_total = [];
+        $pct_present = [];
+        while ($pct_row = $pct_res->fetch_assoc()) {
+            $pct_row_batches = [];
+            if (false) {
+                foreach (explode(',', (string)($pct_row['batch'] ?? '')) as $pct_b) {
+                    $pct_b = strtoupper(str_replace(' ', '', trim($pct_b)));
+                    if ($pct_b === '') continue;
+                    $pct_row_batches[$pct_b] = true;
+                    if (strpos($pct_b, ':') !== false) $pct_row_batches[strtok($pct_b, ':')] = true;
+                }
+            }
+            $pct_present_set = [];
+            foreach (explode(',', (string)$pct_row['presentNo']) as $pct_tok) {
+                $pct_tok = trim($pct_tok);
+                if ($pct_tok === '') continue;
+                $pct_present_set[$pct_id_to_enr[$pct_tok] ?? $pct_tok] = true;
+            }
+            foreach ($pct_enr_batch as $pct_enr => $pct_eb) {
+                if (false) continue;
+                $pct_total[$pct_enr] = ($pct_total[$pct_enr] ?? 0) + 1;
+                if (isset($pct_present_set[$pct_enr])) $pct_present[$pct_enr] = ($pct_present[$pct_enr] ?? 0) + 1;
+            }
+        }
+        $pct_stmt->close();
+        foreach (array_keys($pct_enr_batch) as $pct_enr) {
+            $pct_t = $pct_total[$pct_enr] ?? 0;
+            $subject_att_pct[$pct_enr] = $pct_t > 0 ? round((($pct_present[$pct_enr] ?? 0) / $pct_t) * 100) : -1;
+        }
+    }
+}
+
 // This page only ever edits an already-filled record, so send the user back to
 // the filled view of My Attendance for the same term.
 $my_attendance_url = 'myAttendance.php?' . http_build_query([
@@ -264,6 +312,12 @@ $my_attendance_url = 'myAttendance.php?' . http_build_query([
                                                 <span class="d-block text-truncate" title="<?= htmlspecialchars($display_name) ?>">
                                                     <?= htmlspecialchars($display_name) ?>
                                                 </span>
+                                                <?php $pct_val = $subject_att_pct[trim((string)$roll)] ?? -1; ?>
+                                                <?php if ($pct_val >= 0): ?>
+                                                    <span class="d-block" style="font-size:0.75rem;font-weight:600;color:<?= $pct_val < 75 ? '#dc2626' : '#16a34a' ?>;"><?= $pct_val ?>%</span>
+                                                <?php else: ?>
+                                                    <span class="d-block" style="font-size:0.75rem;color:#94a3b8;">-</span>
+                                                <?php endif; ?>
                                                 <span class="d-block text-muted"><?= htmlspecialchars($student['class']) ?></span>
                                             </div>
                                         </label>
