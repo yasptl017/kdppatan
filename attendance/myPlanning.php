@@ -218,14 +218,17 @@ if (!empty($slot_list)) {
 // Precedence: taken > holiday > cancelled > upcoming > pending
 // Taken = attendance entered (some present + all absent). Absent = the taken slots where every student was absent.
 $type_labels = ['lecture' => 'Lecture', 'lab' => 'Lab', 'tutorial' => 'Tutorial'];
-$zero = ['planned' => 0, 'taken' => 0, 'absent' => 0, 'pending' => 0, 'holiday' => 0, 'cancelled' => 0, 'upcoming' => 0];
+$zero = ['planned' => 0, 'taken' => 0, 'absent' => 0, 'pending' => 0, 'holiday' => 0, 'cancelled' => 0, 'upcoming' => 0, 'extra' => 0];
 $rows = [];
 $totals = [];
 foreach ($type_labels as $k => $_) $totals[$k] = $zero;
 $grand = $zero;
 $absent_slots = [];
+$slot_key_set = [];
 
 foreach ($slot_list as $s) {
+    $slot_key_set[attendance_norm_key($s['mapping_type'], $s['term'], $s['sem'], $s['subject'], $s['class'], $s['date'], $s['slot'])] = true;
+    $slot_key_set[attendance_loose_key($s['mapping_type'], $s['term'], $s['sem'], $s['subject'], $s['class'], $s['date'], $s['slot'])] = true;
     $flag = $filled_lookup[attendance_norm_key($s['mapping_type'], $s['term'], $s['sem'], $s['subject'], $s['class'], $s['date'], $s['slot'])]
          ?? $filled_lookup[attendance_loose_key($s['mapping_type'], $s['term'], $s['sem'], $s['subject'], $s['class'], $s['date'], $s['slot'])]
          ?? null;
@@ -250,6 +253,50 @@ foreach ($slot_list as $s) {
 
     if ($all_absent) $absent_slots[] = $s;
 }
+
+// ── Extra sessions: attendance you saved that matches no mapped slot ──────────
+// (e.g. an extra lecture on a day the mapping doesn't schedule, or via Extra Attendance)
+$extra_sessions = [];
+$extra_fac_id = (string)$logged_faculty_id;
+$extra_fac_name = $session_faculty_name !== '' ? $session_faculty_name : $extra_fac_id;
+$extra_specs = [
+    ['lecture',  "SELECT date, time, term, sem, subject, class AS grp, presentNo FROM lecattendance WHERE term = ? AND (faculty = ? OR faculty = ?)"],
+    ['lab',      "SELECT date, time, term, sem, subject, batch AS grp, presentNo FROM labattendance WHERE term = ? AND (faculty = ? OR faculty = ?) AND COALESCE(TRIM(labNo), '') <> ''"],
+    ['tutorial', "SELECT date, time, term, sem, subject, batch AS grp, presentNo FROM tutattendance WHERE term = ? AND (faculty = ? OR faculty = ?)"],
+];
+foreach ($extra_specs as [$etype, $esql]) {
+    $est = $conn->prepare($esql);
+    if (!$est) continue;
+    $est->bind_param('sss', $filter_term, $extra_fac_id, $extra_fac_name);
+    $est->execute();
+    $eres = $est->get_result();
+    while ($er = $eres->fetch_assoc()) {
+        // lab / tutorial rows may hold several batches; matched if any batch has a slot
+        $groups = $etype === 'lecture' ? [(string)$er['grp']] : (array_filter(array_map('trim', explode(',', (string)$er['grp']))) ?: [(string)$er['grp']]);
+        $matched = false;
+        foreach ($groups as $g) {
+            if (isset($slot_key_set[attendance_norm_key($etype, $er['term'], $er['sem'], $er['subject'], $g, $er['date'], $er['time'])])
+                || isset($slot_key_set[attendance_loose_key($etype, $er['term'], $er['sem'], $er['subject'], $g, $er['date'], $er['time'])])) {
+                $matched = true;
+                break;
+            }
+        }
+        if ($matched) continue;
+
+        $grp = implode(', ', $groups);
+        $extra_sessions[] = ['type' => $etype, 'date' => $er['date'], 'sem' => $er['sem'], 'subject' => $er['subject'], 'class' => $grp, 'slot' => $er['time']];
+
+        $key = $etype . '|' . $er['sem'] . '|' . $er['subject'] . '|' . $grp;
+        if (!isset($rows[$key])) {
+            $rows[$key] = ['type' => $etype, 'sem' => $er['sem'], 'subject' => $er['subject'], 'class' => $grp] + $zero;
+        }
+        $rows[$key]['extra']++;
+        $totals[$etype]['extra']++;
+        $grand['extra']++;
+    }
+    $est->close();
+}
+usort($extra_sessions, fn($a, $b) => strcmp($b['date'], $a['date']));
 
 usort($rows, function ($a, $b) {
     $o = ['lecture' => 0, 'lab' => 1, 'tutorial' => 2];
@@ -314,7 +361,7 @@ usort($absent_slots, fn($a, $b) => strcmp($b['date'], $a['date']));
                                 <thead class="table-light">
                                     <tr>
                                         <th>Type</th><th>Sem</th><th>Subject</th><th>Class / Batch</th>
-                                        <th>Planned</th><th>Taken</th><th>Absent</th><th>Pending</th><th>Holiday</th><th>Cancelled</th><th>Upcoming</th>
+                                        <th>Planned</th><th>Taken</th><th>Absent</th><th>Pending</th><th>Holiday</th><th>Cancelled</th><th>Upcoming</th><th>Extra</th>
                                     </tr>
                                 </thead>
                                 <tbody>
@@ -331,6 +378,7 @@ usort($absent_slots, fn($a, $b) => strcmp($b['date'], $a['date']));
                                             <td class="<?= $r['holiday'] ? 'num-holiday' : '' ?>"><?= $r['holiday'] ?></td>
                                             <td><?= $r['cancelled'] ?></td>
                                             <td><?= $r['upcoming'] ?></td>
+                                            <td class="<?= $r['extra'] ? 'num-taken' : '' ?>"><?= $r['extra'] ?></td>
                                         </tr>
                                     <?php endforeach; ?>
                                 </tbody>
@@ -339,19 +387,47 @@ usort($absent_slots, fn($a, $b) => strcmp($b['date'], $a['date']));
                                         <tr>
                                             <td colspan="4">Total <?= $tl ?></td>
                                             <td><?= $tt['planned'] ?></td><td><?= $tt['taken'] ?></td><td><?= $tt['absent'] ?></td><td><?= $tt['pending'] ?></td>
-                                            <td><?= $tt['holiday'] ?></td><td><?= $tt['cancelled'] ?></td><td><?= $tt['upcoming'] ?></td>
+                                            <td><?= $tt['holiday'] ?></td><td><?= $tt['cancelled'] ?></td><td><?= $tt['upcoming'] ?></td><td><?= $tt['extra'] ?></td>
                                         </tr>
                                     <?php endforeach; ?>
                                     <tr>
                                         <td colspan="4">Grand Total</td>
                                         <td><?= $grand['planned'] ?></td><td><?= $grand['taken'] ?></td><td><?= $grand['absent'] ?></td><td><?= $grand['pending'] ?></td>
-                                        <td><?= $grand['holiday'] ?></td><td><?= $grand['cancelled'] ?></td><td><?= $grand['upcoming'] ?></td>
+                                        <td><?= $grand['holiday'] ?></td><td><?= $grand['cancelled'] ?></td><td><?= $grand['upcoming'] ?></td><td><?= $grand['extra'] ?></td>
                                     </tr>
                                 </tfoot>
                             </table>
                         </div>
                     </div>
                 </div>
+
+                <?php if (!empty($extra_sessions)): ?>
+                <div class="app-card shadow-sm mb-3">
+                    <div class="app-card-body">
+                        <h5 class="mb-3">Extra Sessions <span class="badge bg-success"><?= count($extra_sessions) ?></span></h5>
+                        <p class="text-muted small">Attendance you saved that is not a slot in your mapping (extra lecture/lab/tutorial). Not counted in Planned or Taken.</p>
+                        <div class="table-responsive">
+                            <table class="table table-sm table-bordered plan-table mb-0">
+                                <thead class="table-light">
+                                    <tr><th>Date</th><th>Type</th><th>Sem</th><th>Subject</th><th>Class / Batch</th><th>Slot</th></tr>
+                                </thead>
+                                <tbody>
+                                    <?php foreach ($extra_sessions as $x): ?>
+                                        <tr>
+                                            <td><?= (new DateTime($x['date']))->format('d M Y (D)') ?></td>
+                                            <td><span class="type-pill <?= $x['type'] ?>"><?= $type_labels[$x['type']] ?></span></td>
+                                            <td><?= htmlspecialchars($x['sem']) ?></td>
+                                            <td><?= htmlspecialchars($x['subject']) ?></td>
+                                            <td><?= htmlspecialchars($x['class'] !== '' ? $x['class'] : '-') ?></td>
+                                            <td><?= htmlspecialchars($x['slot']) ?></td>
+                                        </tr>
+                                    <?php endforeach; ?>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+                <?php endif; ?>
 
                 <div class="app-card shadow-sm mb-3">
                     <div class="app-card-body">
